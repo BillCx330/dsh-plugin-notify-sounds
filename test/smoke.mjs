@@ -327,7 +327,8 @@ const primitivesStub = {
 		return { type: 'Switch', props, children: [] };
 	},
 	// The dropdown stub renders its items unconditionally so the wiring
-	// tests can click them; the real Menu gates them on `open`.
+	// tests can click them; the real Menu gates them on `open`. Item text
+	// lives in `label` — mirroring the real primitive's entry contract.
 	Menu(props) {
 		return {
 			type: 'div',
@@ -343,7 +344,7 @@ const primitivesStub = {
 							props.onSelect(item.id);
 						},
 					},
-					children: [item.text],
+					children: [item.label],
 				})),
 			],
 		};
@@ -760,19 +761,19 @@ injected.preview('knock', 60);
 assert.equal(scheduled.length, 2, 'knock preset schedules two voices');
 
 // --- Assertions: picker dropdown wiring -----------------------------------------
-// The pickers offer every preset except `custom` while no upload exists.
+// The pickers offer every preset except `custom` while no upload exists,
+// and every entry carries a non-empty label (the real Menu renders
+// `entry.label`; a wrong field name would show blank rows).
 const menuItems = [];
 walkElements(tree, (element) => {
-	if (element.props['data-menu-item'] !== undefined) menuItems.push(element.props['data-menu-item']);
+	if (element.props['data-menu-item'] !== undefined) menuItems.push(element);
 });
 assert.equal(menuItems.length, 30, 'three pickers render one menu item per offered preset');
-assert.ok(!menuItems.includes('custom'), 'no picker offers Custom without an upload');
+assert.ok(!menuItems.some((element) => element.props['data-menu-item'] === 'custom'), 'no picker offers Custom without an upload');
+assert.ok(menuItems.every((element) => typeof element.children[0] === 'string' && element.children[0] !== ''), 'every menu entry carries a non-empty label');
 // Clicking a menu item writes the field and previews the sound.
 scheduled.length = 0;
-let coinItem;
-walkElements(tree, (element) => {
-	if (element.props['data-menu-item'] === 'coin' && coinItem === undefined) coinItem = element;
-});
+const coinItem = menuItems.find((element) => element.props['data-menu-item'] === 'coin');
 coinItem.props.onClick();
 assert.deepEqual(formWrites.at(-1), { field: 'decisionSound', value: 'coin' }, 'picking a menu item writes the field');
 assert.equal(scheduled.length, 2, 'picking a menu item previews the sound');
