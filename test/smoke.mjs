@@ -693,6 +693,36 @@ publish([['s4', { running: true, pendingInteraction: { kind: 'approval', display
 assert.equal(scheduled.filter((node) => node.buffer === undefined).length, 4, 'custom without an upload falls back to the bell preset');
 assert.equal(scheduled.filter((node) => node.buffer !== undefined).length, 0, 'no buffer source was scheduled');
 
+// A malformed `customSound` (a hand-edited config can carry one) must not
+// escape as an exception: this path runs inside the session-status diff and the
+// repeat-reminder interval, so an escaping throw aborts the whole read and
+// takes the title flash and the reminder tracker down with it.
+form.value = { ...baseValue(), decisionSound: 'custom', customSound: '!!!not base64!!!' };
+scheduled.length = 0;
+let threwFromPreview = false;
+try {
+	injected.preview('custom', 60);
+} catch {
+	threwFromPreview = true;
+}
+assert.equal(threwFromPreview, false, 'a malformed custom payload does not throw when previewed');
+let threwFromTrigger = false;
+try {
+	publish([['s5', { running: true, pendingInteraction: { kind: 'approval', displayReason: '允许执行命令' } }]]);
+} catch {
+	threwFromTrigger = true;
+}
+assert.equal(threwFromTrigger, false, 'a malformed custom payload does not throw from the status trigger');
+// The tracker must still be alive: a later decision still fires. The wait
+// clears the 2s retrigger cooldown the previous publish started.
+await new Promise((resolve) => {
+	setTimeout(resolve, 2100);
+});
+form.value = { ...baseValue(), decisionSound: 'bell' };
+scheduled.length = 0;
+publish([['s6', { running: true, pendingInteraction: { kind: 'approval', displayReason: '允许执行命令' } }]]);
+assert.ok(scheduled.length > 0, 'the trigger pipeline keeps working after a malformed payload');
+
 // Quiet hours covering now suppress the completion sound entirely.
 const pad = (value) => String(value).padStart(2, '0');
 const hhmm = (date) => `${pad(date.getHours())}:${pad(date.getMinutes())}`;
