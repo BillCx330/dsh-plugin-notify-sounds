@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-notify-sounds",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Notification sounds for DeepSeek Harness — a soft chime when the agent needs your decision or finishes a task, with a Settings section styled like DSH's own · 需要决策或任务完成时播放提示音，设置面板可调音量与音效",
   "type": "module",
   "main": "lib/index.js",

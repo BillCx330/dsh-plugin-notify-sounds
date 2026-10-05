@@ -319,11 +319,34 @@ const ReactStub = {
 const SwitchCalls = [];
 const primitivesStub = {
 	Button: 'Button',
+	IconChevronDownOutlineMedium: 'IconChevronDownOutlineMedium',
 	IconPlayOutlineRegular: 'IconPlayOutlineRegular',
 	SegmentedControl: 'SegmentedControl',
 	Switch(props) {
 		SwitchCalls.push(props);
 		return { type: 'Switch', props, children: [] };
+	},
+	// The dropdown stub renders its items unconditionally so the wiring
+	// tests can click them; the real Menu gates them on `open`.
+	Menu(props) {
+		return {
+			type: 'div',
+			props: { className: 'menu-root', 'data-menu': 'true' },
+			children: [
+				props.anchor,
+				...props.items.map((item) => ({
+					type: 'button',
+					props: {
+						key: item.id,
+						'data-menu-item': item.id,
+						onClick: () => {
+							props.onSelect(item.id);
+						},
+					},
+					children: [item.text],
+				})),
+			],
+		};
 	},
 };
 const exports = registration.factory((specifier) => {
@@ -735,6 +758,24 @@ assert.equal(scheduled.length, 3, 'success preset schedules three voices');
 scheduled.length = 0;
 injected.preview('knock', 60);
 assert.equal(scheduled.length, 2, 'knock preset schedules two voices');
+
+// --- Assertions: picker dropdown wiring -----------------------------------------
+// The pickers offer every preset except `custom` while no upload exists.
+const menuItems = [];
+walkElements(tree, (element) => {
+	if (element.props['data-menu-item'] !== undefined) menuItems.push(element.props['data-menu-item']);
+});
+assert.equal(menuItems.length, 30, 'three pickers render one menu item per offered preset');
+assert.ok(!menuItems.includes('custom'), 'no picker offers Custom without an upload');
+// Clicking a menu item writes the field and previews the sound.
+scheduled.length = 0;
+let coinItem;
+walkElements(tree, (element) => {
+	if (element.props['data-menu-item'] === 'coin' && coinItem === undefined) coinItem = element;
+});
+coinItem.props.onClick();
+assert.deepEqual(formWrites.at(-1), { field: 'decisionSound', value: 'coin' }, 'picking a menu item writes the field');
+assert.equal(scheduled.length, 2, 'picking a menu item previews the sound');
 
 // --- Assertions: custom sound upload row ----------------------------------------
 let fileInput;
