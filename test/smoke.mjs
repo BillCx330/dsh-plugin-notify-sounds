@@ -21,12 +21,19 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 // --- Module Loader stub -------------------------------------------------------
 let registration;
+// Recording fetch mock: the notification click posts to the Host focus route.
+const fetchCalls = [];
+globalThis.fetch = (input, init) => {
+	fetchCalls.push({ input: String(input), init });
+	return Promise.resolve({ ok: true });
+};
 globalThis.window = {
 	__ModuleLoader__: {
 		load(reg) {
 			registration = reg;
 		},
 	},
+	focus() {},
 };
 
 // Recording AudioContext mock: every scheduled oscillator is captured.
@@ -722,6 +729,12 @@ assert.equal(notifications.length, 1, 'a hidden page shows one system notificati
 assert.equal(notifications[0].options.body, '继续吗？', 'the notification body uses the question text');
 assert.equal(notifications[0].options.tag, 'dsh-notify-sounds:decision', 'decision notifications share a collapse tag');
 assert.equal(scheduled.length, 3, 'the sound still plays alongside the notification');
+// Clicking the notification asks the Host focus route to raise the window.
+fetchCalls.length = 0;
+notifications[0].onclick();
+assert.equal(fetchCalls.length, 1, 'the notification click posts to the focus route');
+assert.equal(fetchCalls[0].input, '/notify-sounds/focus', 'the focus route path matches the Host half');
+assert.equal(fetchCalls[0].init.method, 'POST', 'the focus request is a POST');
 document.visibilityState = 'visible';
 form.value = { ...baseValue() };
 
