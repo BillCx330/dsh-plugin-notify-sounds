@@ -1,0 +1,12 @@
+# dsh-plugin-notify-sounds — dsh bundle patch.
+#
+# One row: this package's own Host half. The row declares the volatile Config
+# schema the Settings document serves under the `notify-sounds` namespace, and
+# mounting it is what makes the package discoverable by the client-module
+# scanner (`dsh.client` is read from the manifest of the package a Loader row
+# mounts), so the browser half — the notification sounds and the Settings
+# section — is served with it.
+
+- insert:
+    - id: notify-sounds
+      name: 'dsh-plugin-notify-sounds'

@@ -1,0 +1,10 @@
+# Dependencies
+node_modules/
+
+# Scratch / reference extractions
+.dsh-ref/
+
+# Logs & editor artifacts
+*.log
+.DS_Store
+Thumbs.db
