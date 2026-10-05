@@ -64,6 +64,21 @@ class MockGain extends MockNode {
 		this.gain = Object.assign(new MockParam(), { value: 0 });
 	}
 }
+/** Decoded-buffer mock: one channel with a controllable peak sample. */
+function mockDecodedBuffer(peak = 0.5) {
+	return {
+		numberOfChannels: 1,
+		getChannelData: () => new Float32Array([peak, peak / 2, 0]),
+	};
+}
+class MockBufferSource extends MockNode {
+	constructor() {
+		super();
+		scheduled.push(this);
+	}
+	start() {}
+	stop() {}
+}
 globalThis.window.AudioContext = class {
 	constructor() {
 		this.state = 'running';
@@ -78,6 +93,15 @@ globalThis.window.AudioContext = class {
 	}
 	createOscillator() {
 		return new MockOscillator();
+	}
+	createBufferSource() {
+		return new MockBufferSource();
+	}
+	decodeAudioData(bytes) {
+		// Decodes only the sentinel payload; anything else is undecodable.
+		const raw = String.fromCharCode(...new Uint8Array(bytes));
+		if (raw === 'good-audio') return Promise.resolve(mockDecodedBuffer(0.5));
+		return Promise.reject(new Error('decode failed'));
 	}
 };
 
@@ -166,12 +190,46 @@ class FakeMutationObserver {
 }
 globalThis.MutationObserver = FakeMutationObserver;
 
+// Timer capture: the repeat reminder's checker is invoked manually.
+let renotifyChecker = null;
+const realSetInterval = globalThis.setInterval;
+globalThis.setInterval = (fn, ms) => {
+	renotifyChecker = fn;
+	return 1;
+};
+globalThis.clearInterval = () => {
+	renotifyChecker = null;
+};
+
+// Notification API stub with a mutable permission.
+const notifications = [];
+globalThis.Notification = class {
+	static permission = 'granted';
+	constructor(title, options) {
+		this.title = title;
+		this.options = options;
+		notifications.push(this);
+	}
+	close() {}
+	static requestPermission() {
+		return Promise.resolve(Notification.permission);
+	}
+};
+
 let currentPanel = null;
+const documentListeners = {};
 globalThis.document = {
 	body: fakeNode('BODY'),
 	head: fakeNode('HEAD'),
 	activeElement: null,
 	visibilityState: 'visible',
+	title: '',
+	addEventListener(type, listener) {
+		(documentListeners[type] ??= []).push(listener);
+	},
+	removeEventListener(type, listener) {
+		documentListeners[type] = (documentListeners[type] ?? []).filter((entry) => entry !== listener);
+	},
 	querySelector(selector) {
 		if (selector === '[data-shortcut-modal="settings"]') return currentPanel;
 		return null;
@@ -184,6 +242,10 @@ globalThis.document = {
 		node.namespaceURI = ns;
 		return node;
 	},
+};
+/** Dispatch one document event to its registered listeners. */
+const dispatchDocumentEvent = (type) => {
+	for (const listener of documentListeners[type] ?? []) listener();
 };
 
 // --- Load the Client half -----------------------------------------------------
@@ -282,8 +344,27 @@ const slotRegistrations = [];
 const formWrites = [];
 const effects = [];
 
+/** Fresh preference object every test resets from. */
+const baseValue = () => ({
+	enabled: true,
+	volume: 60,
+	decisionSound: 'bell',
+	questionSound: 'chime',
+	completionSound: 'ding',
+	onlyWhenHidden: false,
+	customSound: '',
+	customSoundName: '',
+	systemNotify: false,
+	titleFlash: false,
+	renotify: false,
+	renotifyMinutes: 5,
+	quietHours: false,
+	quietStart: '22:00',
+	quietEnd: '08:00',
+});
+
 const form = {
-	value: { enabled: true, volume: 60, decisionSound: 'bell', completionSound: 'ding', onlyWhenHidden: false },
+	value: baseValue(),
 	getSnapshot() {
 		return { status: 'ready', value: form.value, writable: true };
 	},
@@ -451,6 +532,7 @@ assert.equal(tree.type, 'div');
 assert.equal(tree.children[0].length, 3, 'title, intro, rows');
 assert.equal(tree.children[0][0].type, 'h2', 'the title is a heading like the shipped sections');
 assert.equal(tree.children[0][1].type, 'p', 'the intro is a paragraph');
+assert.equal(tree.children[0][2].children[0].length, 11, 'eleven rows render: switch, volume, three pickers, custom, notification, flash, renotify, quiet, hidden');
 
 // --- Assertions: uncontrolled volume slider ------------------------------------
 let inputElement;
@@ -513,39 +595,172 @@ assert.equal(scheduled.length, 0, 'a zero volume stays silent');
 
 // --- Assertions: status triggers -----------------------------------------------
 assert.equal(statusListeners.length, 1, 'one status subscription');
+assert.ok(renotifyChecker, 'the repeat-reminder checker registered its timer');
 
-// Decision trigger: a pending interaction appears on a session.
+/** Publish one status snapshot and run the watcher. */
+const publish = (rows) => {
+	statusSnapshot = new Map(rows);
+	for (const listener of statusListeners) listener();
+};
+
+// Decision trigger: a pending approval appears on a session.
 scheduled.length = 0;
-statusSnapshot = new Map([['s1', { running: true, pendingInteraction: { kind: 'approval' }, completionUnread: false }]]);
-for (const listener of statusListeners) listener();
+publish([['s1', { running: true, pendingInteraction: { kind: 'approval' }, completionUnread: false }]]);
 assert.equal(scheduled.length, 4, 'bell preset schedules four voices (two notes + partials)');
 
-// Cooldown: the same trigger again within the window stays silent.
+// Cooldown: a second decision within the window stays silent.
 scheduled.length = 0;
-statusSnapshot = new Map([['s1', { running: true, pendingInteraction: { kind: 'question' }, completionUnread: false }]]);
-for (const listener of statusListeners) listener();
+publish([['s1', { running: true, pendingInteraction: { kind: 'approval', key: 'approval:2' }, completionUnread: false }]]);
 assert.equal(scheduled.length, 0, 'retrigger cooldown suppresses the second decision sound');
 
 // Completion trigger: running -> idle (after the cooldown window).
 await new Promise((resolve) => {
 	setTimeout(resolve, 30);
 });
-form.value = { ...form.value, completionSound: 'arc' };
+form.value = { ...baseValue(), completionSound: 'arc' };
 scheduled.length = 0;
-statusSnapshot = new Map([['s1', { running: false, pendingInteraction: undefined, completionUnread: true }]]);
-for (const listener of statusListeners) listener();
+publish([['s1', { running: false, pendingInteraction: undefined, completionUnread: true }]]);
 assert.equal(scheduled.length, 4, 'arc preset schedules four voices');
 
 // Muted master switch suppresses playback.
 await new Promise((resolve) => {
 	setTimeout(resolve, 30);
 });
-form.value = { ...form.value, enabled: false };
+form.value = { ...baseValue(), enabled: false };
 scheduled.length = 0;
-statusSnapshot = new Map([['s2', { running: true, pendingInteraction: undefined, completionUnread: false }]]);
-statusSnapshot = new Map([['s2', { running: false, pendingInteraction: undefined, completionUnread: true }]]);
-for (const listener of statusListeners) listener();
+publish([['s2', { running: true, pendingInteraction: undefined, completionUnread: false }]]);
+publish([['s2', { running: false, pendingInteraction: undefined, completionUnread: true }]]);
 assert.equal(scheduled.length, 0, 'disabled preference mutes the completion sound');
+
+// --- Assertions: question routing, custom sound, quiet hours --------------------
+// Let every per-kind cooldown lapse so the later triggers fire on merit.
+await new Promise((resolve) => {
+	setTimeout(resolve, 2100);
+});
+
+// A pending question routes to the question preset, not the decision one.
+form.value = { ...baseValue(), questionSound: 'chime' };
+scheduled.length = 0;
+publish([['s3', { running: true, pendingInteraction: { kind: 'question', questions: [{ question: '继续吗？' }] } }]]);
+assert.equal(scheduled.length, 3, 'a pending question plays the chime preset (three voices)');
+
+// The custom preset decodes the uploaded payload and plays it through a buffer source.
+form.value = { ...baseValue(), customSound: btoa('good-audio'), decisionSound: 'custom' };
+scheduled.length = 0;
+injected.preview('custom', 60);
+await new Promise((resolve) => {
+	setTimeout(resolve, 10);
+});
+assert.ok(scheduled.length >= 1, 'the custom preset scheduled playback');
+assert.ok(scheduled.at(-1).buffer !== undefined, 'the custom preset plays through a buffer source');
+assert.ok(scheduled.at(-1).buffer.getChannelData !== undefined, 'the decoded buffer is cached and playable');
+
+// A picker left on `custom` with no upload falls back to the decision preset.
+form.value = { ...baseValue(), decisionSound: 'custom', customSound: '' };
+scheduled.length = 0;
+publish([['s4', { running: true, pendingInteraction: { kind: 'approval', displayReason: '允许执行命令' } }]]);
+assert.equal(scheduled.filter((node) => node.buffer === undefined).length, 4, 'custom without an upload falls back to the bell preset');
+assert.equal(scheduled.filter((node) => node.buffer !== undefined).length, 0, 'no buffer source was scheduled');
+
+// Quiet hours covering now suppress the completion sound entirely.
+const pad = (value) => String(value).padStart(2, '0');
+const hhmm = (date) => `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+const now = new Date();
+form.value = { ...baseValue(), quietHours: true, quietStart: hhmm(now), quietEnd: hhmm(new Date(now.getTime() - 60000)) };
+scheduled.length = 0;
+publish([['s5', { running: true, pendingInteraction: undefined, completionUnread: false }]]);
+publish([['s5', { running: false, pendingInteraction: undefined, completionUnread: true }]]);
+assert.equal(scheduled.length, 0, 'quiet hours covering the current minute suppress the sound');
+
+// --- Assertions: title flash and system notification ----------------------------
+// The title-bar flash tracks pending decisions while the page is hidden.
+form.value = { ...baseValue(), titleFlash: true };
+document.visibilityState = 'hidden';
+scheduled.length = 0;
+publish([['s6', { running: true, pendingInteraction: { kind: 'approval' } }]]);
+assert.ok(document.title.startsWith('🔔 '), 'a hidden page with a pending decision gets the title prefix');
+document.visibilityState = 'visible';
+dispatchDocumentEvent('visibilitychange');
+assert.ok(!document.title.startsWith('🔔 '), 'returning to the page clears the title prefix');
+form.value = { ...baseValue() };
+
+// The system notification carries the interaction's own summary text.
+// (Another cooldown lapse: the question trigger fired moments ago.)
+await new Promise((resolve) => {
+	setTimeout(resolve, 2100);
+});
+form.value = { ...baseValue(), systemNotify: true };
+document.visibilityState = 'hidden';
+notifications.length = 0;
+scheduled.length = 0;
+publish([['s7', { running: true, pendingInteraction: { kind: 'question', questions: [{ question: '继续吗？' }] } }]]);
+assert.equal(notifications.length, 1, 'a hidden page shows one system notification');
+assert.equal(notifications[0].options.body, '继续吗？', 'the notification body uses the question text');
+assert.equal(notifications[0].options.tag, 'dsh-notify-sounds:decision', 'decision notifications share a collapse tag');
+assert.equal(scheduled.length, 3, 'the sound still plays alongside the notification');
+document.visibilityState = 'visible';
+form.value = { ...baseValue() };
+
+// --- Assertions: repeat reminder ------------------------------------------------
+// Backdate the clock past the configured interval with a decision still pending.
+form.value = { ...baseValue(), renotify: true, renotifyMinutes: 1 };
+scheduled.length = 0;
+const realDateNow = Date.now;
+Date.now = () => realDateNow() + 120000;
+try {
+	renotifyChecker();
+} finally {
+	Date.now = realDateNow;
+}
+assert.equal(scheduled.length, 3, 'an unanswered decision re-pings through the question preset after the interval');
+
+// With the toggle off the checker stays silent.
+form.value = { ...baseValue(), renotify: false };
+scheduled.length = 0;
+Date.now = () => realDateNow() + 240000;
+try {
+	renotifyChecker();
+} finally {
+	Date.now = realDateNow;
+}
+assert.equal(scheduled.length, 0, 'the repeat reminder is silent while disabled');
+
+// --- Assertions: new presets ----------------------------------------------------
+scheduled.length = 0;
+injected.preview('coin', 60);
+assert.equal(scheduled.length, 2, 'coin preset schedules two voices');
+scheduled.length = 0;
+injected.preview('success', 60);
+assert.equal(scheduled.length, 3, 'success preset schedules three voices');
+scheduled.length = 0;
+injected.preview('knock', 60);
+assert.equal(scheduled.length, 2, 'knock preset schedules two voices');
+
+// --- Assertions: custom sound upload row ----------------------------------------
+let fileInput;
+walkElements(tree, (element) => {
+	if (element.type === 'input' && element.props.type === 'file') fileInput = element;
+});
+assert.ok(fileInput, 'the upload row rendered its file input');
+const goodFile = {
+	name: 'ring.mp3',
+	size: 10,
+	arrayBuffer: async () => new TextEncoder().encode('good-audio').buffer,
+};
+await fileInput.props.onChange({ currentTarget: { files: [goodFile], value: 'x' } });
+assert.deepEqual(
+	formWrites.filter((write) => write.field === 'customSound' || write.field === 'customSoundName'),
+	[
+		{ field: 'customSound', value: btoa('good-audio') },
+		{ field: 'customSoundName', value: 'ring.mp3' },
+	],
+	'a decodable file under the cap is stored as base64 with its name',
+);
+// An oversized file is rejected before any write.
+const writesBefore = formWrites.length;
+const bigFile = { name: 'big.mp3', size: 600000, arrayBuffer: async () => new ArrayBuffer(8) };
+await fileInput.props.onChange({ currentTarget: { files: [bigFile], value: 'x' } });
+assert.equal(formWrites.length, writesBefore, 'an oversized file is rejected without writes');
 
 // A write through the section's setField reaches the form.
 await injected.setField('volume', 42);
