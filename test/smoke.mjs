@@ -372,6 +372,7 @@ assert.deepEqual(exports.inject, ['uiSession', 'configForms', 'slots', 'locale']
 
 // --- Mock services ------------------------------------------------------------
 const localeRegistrations = [];
+let localeListeners = [];
 let statusListeners = [];
 let statusSnapshot = new Map();
 const slotInjections = [];
@@ -424,8 +425,20 @@ const ctx = {
 			localeRegistrations.push({ ns, dicts });
 			return () => {};
 		},
-		bind() {
-			return (key) => (key === 'nav' ? '提示音' : key);
+		bind(ns) {
+			// Resolve from the dictionary the plugin actually registered, so a
+			// test asserting on visible text is checking the real copy.
+			return (key) => {
+				if (key === 'nav') return '提示音';
+				const registered = localeRegistrations.filter((entry) => entry.ns === ns).at(-1);
+				return registered?.dicts?.zh?.[key] ?? key;
+			};
+		},
+		subscribe(listener) {
+			localeListeners.push(listener);
+			return () => {
+				localeListeners = localeListeners.filter((entry) => entry !== listener);
+			};
 		},
 	},
 	configForms: {
