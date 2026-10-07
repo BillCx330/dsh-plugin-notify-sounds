@@ -217,7 +217,9 @@ globalThis.Notification = class {
 		this.options = options;
 		notifications.push(this);
 	}
-	close() {}
+	close() {
+		this.closed = true;
+	}
 	static requestPermission() {
 		return Promise.resolve(Notification.permission);
 	}
@@ -368,13 +370,15 @@ const exports = registration.factory((specifier) => {
 });
 
 assert.equal(typeof exports.apply, 'function', 'exports apply');
-assert.deepEqual(exports.inject, ['uiSession', 'configForms', 'slots', 'locale'], 'declares its services');
+assert.deepEqual(exports.inject, ['uiSession', 'sessions', 'configForms', 'slots', 'locale'], 'declares its services');
 
 // --- Mock services ------------------------------------------------------------
 const localeRegistrations = [];
 let localeListeners = [];
 let statusListeners = [];
 let statusSnapshot = new Map();
+/** Session list rows, filled per test: `origin`/`parentId` classify sub-agents. */
+const sessionRowsById = {};
 const slotInjections = [];
 const slotRegistrations = [];
 const formWrites = [];
@@ -387,6 +391,7 @@ const baseValue = () => ({
 	decisionSound: 'bell',
 	questionSound: 'chime',
 	completionSound: 'ding',
+	subagentAlerts: false,
 	onlyWhenHidden: false,
 	customSound: '',
 	customSoundName: '',
@@ -463,6 +468,14 @@ const ctx = {
 					statusListeners = statusListeners.filter((entry) => entry !== listener);
 				};
 			},
+		},
+	},
+	// Session list rows carry the classification the status facts lack: a
+	// sub-agent child is `origin: 'subagent'` / `parentId`, exactly what the
+	// sidebar uses to keep sub-agents out of the ordinary list.
+	sessions: {
+		list: {
+			getSnapshot: () => ({ byId: sessionRowsById }),
 		},
 	},
 	slots: {
@@ -580,7 +593,7 @@ assert.equal(tree.type, 'div');
 assert.equal(tree.children[0].length, 3, 'title, intro, rows');
 assert.equal(tree.children[0][0].type, 'h2', 'the title is a heading like the shipped sections');
 assert.equal(tree.children[0][1].type, 'p', 'the intro is a paragraph');
-assert.equal(tree.children[0][2].children[0].length, 11, 'eleven rows render: switch, volume, three pickers, custom, notification, flash, renotify, quiet, hidden');
+assert.equal(tree.children[0][2].children[0].length, 12, 'twelve rows render: switch, volume, three pickers, sub-agent scope, custom, notification, flash, renotify, quiet, hidden');
 
 // --- Assertions: uncontrolled volume slider ------------------------------------
 let inputElement;
@@ -792,7 +805,7 @@ scheduled.length = 0;
 publish([['s7', { running: true, pendingInteraction: { kind: 'question', questions: [{ question: '继续吗？' }] } }]]);
 assert.equal(notifications.length, 1, 'a hidden page shows one system notification');
 assert.equal(notifications[0].options.body, '继续吗？', 'the notification body uses the question text');
-assert.equal(notifications[0].options.tag, 'dsh-notify-sounds:decision', 'decision notifications share a collapse tag');
+assert.equal(notifications[0].options.tag, undefined, 'the platform tag is not used — tag replacement can drop the click');
 assert.equal(scheduled.length, 3, 'the sound still plays alongside the notification');
 // Clicking the notification asks the Host focus route to raise the window.
 fetchCalls.length = 0;
@@ -800,50 +813,97 @@ notifications[0].onclick();
 assert.equal(fetchCalls.length, 1, 'the notification click posts to the focus route');
 assert.equal(fetchCalls[0].input, '/notify-sounds/focus', 'the focus route path matches the Host half');
 assert.equal(fetchCalls[0].init.method, 'POST', 'the focus request is a POST');
+// Success is quiet: the window coming back IS the feedback. Only a click that
+// brings no window back says so a few seconds later. It is checked by FOCUS,
+// not by visibility: a window can be un-minimized yet left behind, or on
+// another virtual desktop, and the page reads visible in both cases.
+assert.equal(notifications.length, 1, 'a click in flight shows nothing — success is quiet');
+assert.equal(notifications[0].options.requireInteraction, undefined, 'toasts auto-dismiss again');
+
+await new Promise((resolve) => {
+	setTimeout(resolve, 5200);
+});
+assert.equal(notifications.length, 2, 'a click that does not focus the window reports it');
+assert.equal(notifications[1].options.requireInteraction, undefined, 'and the report is not pinned either');
+
+assert.equal(notifications[1].title, '没能唤回窗口', 'the report names the failure');
+assert.equal(notifications[1].options.body, '点击没有生效，请手动切回 DSH 窗口', 'and tells the user what to do');
 document.visibilityState = 'visible';
 form.value = { ...baseValue() };
 
 // --- Assertions: repeat reminder ------------------------------------------------
-// Backdate the clock past the configured interval with a decision still pending.
+// The reminder exists only to reach someone who has NOT seen the decision.
+// Seen once — it appeared while the user was at the window, or they came back
+// to it — it never repeats again, not even after they switch away. Only a
+// decision that appeared while the window was elsewhere is re-pinged, on its
+// own cadence, until it is handled or seen.
 form.value = { ...baseValue(), renotify: true, renotifyMinutes: 1 };
-// The earlier assertions left no pending interaction (a session without one
-// clears its tracker entry); establish one again so the reminder has a subject.
-publish([['s7', { running: true, pendingInteraction: { kind: 'question', questions: [{ question: '继续吗？' }] } }]]);
 const realDateNow = Date.now;
-// A reminder only reaches someone looking elsewhere. The clock is pushed past
-// the interval first, so the ONLY thing that can keep this silent is the
-// visibility gate — which is what used to fire right after returning to the
-// window.
+/** Run the reminder checker at a moment offset from the real clock. */
+const checkAt = (offsetMs) => {
+	Date.now = () => realDateNow() + offsetMs;
+	try {
+		renotifyChecker();
+	} finally {
+		Date.now = realDateNow;
+	}
+};
+
+// Case 1: it appeared while the page was visible, so the user has already seen
+// it. Switching away afterwards must NOT re-arm it for another round — that
+// re-arm is what used to ring a full interval after the user had read it.
 document.visibilityState = 'visible';
-scheduled.length = 0;
-Date.now = () => realDateNow() + 120000;
-try {
-	renotifyChecker();
-} finally {
-	Date.now = realDateNow;
-}
-assert.equal(scheduled.length, 0, 'a visible page is not re-pinged even past the interval');
-
-// Hidden again, past the interval, the reminder fires.
+publish([['s7', { running: true, pendingInteraction: { kind: 'question', questions: [{ question: '继续吗？' }] } }]]);
 document.visibilityState = 'hidden';
-Date.now = () => realDateNow() + 180000;
-try {
-	renotifyChecker();
-} finally {
-	Date.now = realDateNow;
-}
-assert.equal(scheduled.length, 3, 'an unanswered decision re-pings through the question preset after the interval');
+scheduled.length = 0;
+checkAt(120000);
+assert.equal(scheduled.length, 0, 'a decision seen at the window is never re-pinged, even after switching away');
 
-// With the toggle off the checker stays silent.
+// Case 2: it appeared while the window was elsewhere and was never seen, so it
+// re-pings on the interval — and the cadence advances from the ping, not from
+// the moment the decision appeared.
+document.visibilityState = 'hidden';
+form.value = { ...baseValue(), renotify: true, renotifyMinutes: 1, systemNotify: true };
+notifications.length = 0;
+publish([['s8', { running: true, pendingInteraction: { kind: 'approval' } }]]);
+assert.equal(notifications.length, 1, 'the decision notifies while the page is hidden');
+scheduled.length = 0;
+checkAt(30000);
+assert.equal(scheduled.length, 0, 'an unseen decision is not re-pinged before the interval elapses');
+scheduled.length = 0;
+checkAt(130000);
+assert.equal(scheduled.length, 4, 'an unseen decision re-pings through the decision preset after the interval');
+assert.equal(notifications.length, 2, 'the repeat reminder re-notifies');
+assert.equal(notifications[0].closed, true, 'the superseded toast is closed by us rather than left to tag replacement');
+assert.equal(notifications[1].options.tag, undefined, 'the reminder is collapsed by us rather than by a platform tag');
+scheduled.length = 0;
+checkAt(180000);
+assert.equal(scheduled.length, 0, 'the next re-ping waits a full interval after the previous one');
+
+// The toggle gates the reminder, on a decision that is still unseen.
 form.value = { ...baseValue(), renotify: false };
 scheduled.length = 0;
-Date.now = () => realDateNow() + 240000;
-try {
-	renotifyChecker();
-} finally {
-	Date.now = realDateNow;
-}
+checkAt(250000);
 assert.equal(scheduled.length, 0, 'the repeat reminder is silent while disabled');
+
+// Case 3: coming back to the window SEES the decision, so it leaves the
+// reminder for good — switching away again does not revive it.
+form.value = { ...baseValue(), renotify: true, renotifyMinutes: 1 };
+document.visibilityState = 'visible';
+dispatchDocumentEvent('visibilitychange');
+document.visibilityState = 'hidden';
+scheduled.length = 0;
+checkAt(300000);
+assert.equal(scheduled.length, 0, 'returning to the window ends the repeats for good');
+
+// A page being watched right now is never pinged, even past the interval and
+// even before its visibility event has been delivered.
+document.visibilityState = 'hidden';
+publish([['s9', { running: true, pendingInteraction: { kind: 'approval' } }]]);
+document.visibilityState = 'visible';
+scheduled.length = 0;
+checkAt(400000);
+assert.equal(scheduled.length, 0, 'a watched page is not re-pinged even past the interval');
 document.visibilityState = 'visible';
 
 // --- Assertions: new presets ----------------------------------------------------
@@ -904,5 +964,77 @@ assert.equal(formWrites.length, writesBefore, 'an oversized file is rejected wit
 // A write through the section's setField reaches the form.
 await injected.setField('volume', 42);
 assert.deepEqual(formWrites.at(-1), { field: 'volume', value: 42 });
+
+// --- Assertions: quiet-hours inputs and a refused permission --------------------
+// A cleared time field is the control being emptied, not a value the schema can
+// accept (it wants "HH:MM"): it snaps back to the accepted value instead of
+// committing a write that is certain to be refused — which would report a
+// baffling "save failed" on a row the user was only half-way through editing.
+const timeInputs = [];
+walkElements(tree, (element) => {
+	if (element.type === 'input' && element.props.type === 'time') timeInputs.push(element);
+});
+assert.equal(timeInputs.length, 2, 'the quiet-hours row renders its two time inputs');
+const writesBeforeClear = formWrites.length;
+const clearedInput = { value: '' };
+timeInputs[0].props.onChange({ currentTarget: clearedInput });
+assert.equal(clearedInput.value, '22:00', 'a cleared time input snaps back to the accepted value');
+assert.equal(formWrites.length, writesBeforeClear, 'a cleared time input writes nothing');
+timeInputs[0].props.onChange({ currentTarget: { value: '23:30' } });
+assert.deepEqual(formWrites.at(-1), { field: 'quietStart', value: '23:30' }, 'a usable time is committed');
+
+// A rejected permission request is a denial by any other name: the switch must
+// settle on `false` rather than leave an unhandled rejection behind and a
+// toggle that claims an enable nothing will honour.
+let systemNotifySwitch;
+walkElements(tree, (element) => {
+	if (element.type === 'Switch' && element.props.label === 'systemNotify.title') systemNotifySwitch = element;
+});
+assert.ok(systemNotifySwitch, 'the system-notification switch rendered');
+const realRequestPermission = Notification.requestPermission;
+Notification.requestPermission = () => Promise.reject(new Error('denied'));
+form.value = { ...baseValue() };
+const writesBeforePermission = formWrites.length;
+await systemNotifySwitch.props.onChange(true);
+Notification.requestPermission = realRequestPermission;
+assert.deepEqual(
+	formWrites.slice(writesBeforePermission),
+	[{ field: 'systemNotify', value: false }],
+	'a refused permission request leaves the switch off instead of throwing',
+);
+
+// --- Assertions: sub-agent alerts ----------------------------------------------
+// Sub-agent sessions are invisible to the plugin unless asked for: the point
+// is the user's own conversation, and a background sub-agent finishing is not
+// something they want a chime for.
+sessionRowsById.sub1 = { id: 'sub1', origin: 'subagent', parentId: 's1' };
+form.value = { ...baseValue() };
+await new Promise((resolve) => {
+	setTimeout(resolve, 2100);
+});
+scheduled.length = 0;
+publish([['sub1', { running: true, pendingInteraction: undefined }]]);
+publish([['sub1', { running: false, pendingInteraction: undefined, completionUnread: true }]]);
+assert.equal(scheduled.length, 0, 'a sub-agent finishing stays silent by default');
+scheduled.length = 0;
+publish([['sub1', { running: true, pendingInteraction: { kind: 'approval' } }]]);
+assert.equal(scheduled.length, 0, 'and so does a sub-agent decision');
+// A forked conversation carries a `parentId` too and is still the user's own:
+// only `origin` marks a sub-agent, exactly as DSH's own sidebar decides it.
+sessionRowsById.fork1 = { id: 'fork1', parentId: 's1' };
+scheduled.length = 0;
+publish([['fork1', { running: false, pendingInteraction: undefined }]]);
+publish([['fork1', { running: true, pendingInteraction: undefined }]]);
+publish([['fork1', { running: false, pendingInteraction: undefined, completionUnread: true }]]);
+assert.ok(scheduled.length > 0, 'a forked conversation still alerts — it is the user’s own');
+// Asked for, the same transitions alert like any other session.
+form.value = { ...baseValue(), subagentAlerts: true };
+await new Promise((resolve) => {
+	setTimeout(resolve, 2100);
+});
+scheduled.length = 0;
+publish([['sub1', { running: true, pendingInteraction: undefined }]]);
+publish([['sub1', { running: false, pendingInteraction: undefined, completionUnread: true }]]);
+assert.ok(scheduled.length > 0, 'with sub-agent alerts on, a sub-agent finishing alerts normally');
 
 console.log('smoke test: all assertions passed');
