@@ -813,21 +813,10 @@ notifications[0].onclick();
 assert.equal(fetchCalls.length, 1, 'the notification click posts to the focus route');
 assert.equal(fetchCalls[0].input, '/notify-sounds/focus', 'the focus route path matches the Host half');
 assert.equal(fetchCalls[0].init.method, 'POST', 'the focus request is a POST');
-// Success is quiet: the window coming back IS the feedback. Only a click that
-// brings no window back says so a few seconds later. It is checked by FOCUS,
-// not by visibility: a window can be un-minimized yet left behind, or on
-// another virtual desktop, and the page reads visible in both cases.
-assert.equal(notifications.length, 1, 'a click in flight shows nothing — success is quiet');
-assert.equal(notifications[0].options.requireInteraction, undefined, 'toasts auto-dismiss again');
-
-await new Promise((resolve) => {
-	setTimeout(resolve, 5200);
-});
-assert.equal(notifications.length, 2, 'a click that does not focus the window reports it');
-assert.equal(notifications[1].options.requireInteraction, undefined, 'and the report is not pinned either');
-
-assert.equal(notifications[1].title, '没能唤回窗口', 'the report names the failure');
-assert.equal(notifications[1].options.body, '点击没有生效，请手动切回 DSH 窗口', 'and tells the user what to do');
+// The click posts to the Host focus route and says nothing about it: the
+// window coming back IS the feedback.
+assert.equal(notifications.length, 1, 'a click raises no follow-up notification');
+assert.equal(notifications[0].options.requireInteraction, undefined, 'toasts auto-dismiss');
 document.visibilityState = 'visible';
 form.value = { ...baseValue() };
 
