@@ -96,6 +96,7 @@ For anyone hacking on the code (exact details live in the source comments):
 
 ## Changelog
 
+- **v1.4.1** (2026-10-07) Removed the "could not raise the window" notice — it misfired even when the window came back, and success is its own feedback; a notification click is now fully silent. Also: the READMEs are rewritten as a release page.
 - **v1.4.0** (2026-10-07) Seen once, never repeated; fixed notification clicks doing nothing (root cause: platform `tag` replacement swallowing the click); new **Sub-agent alerts** toggle; plus five smaller fixes.
 - **v1.3.3** (2026-10-07) Repeat reminders no longer interrupt you while you are looking at the window; the title alert uses words.
 - **v1.3.2** (2026-10-05) Fixes from two code reviews: malformed base64 aborting the tracker, notification objects collected, repeat pings eating the cooldown, backwards clock muting, `titleFlash` applying immediately.
