@@ -254,6 +254,10 @@ globalThis.document = {
 const dispatchDocumentEvent = (type) => {
 	for (const listener of documentListeners[type] ?? []) listener();
 };
+/** Fire every live title observer, as a `<title>` mutation would. */
+const dispatchTitleMutation = () => {
+	for (const observer of observers) observer.trigger();
+};
 
 // --- Load the Client half -----------------------------------------------------
 eval(readFileSync(join(root, 'lib/client.js'), 'utf8'));
@@ -733,16 +737,34 @@ publish([['s5', { running: true, pendingInteraction: undefined, completionUnread
 publish([['s5', { running: false, pendingInteraction: undefined, completionUnread: true }]]);
 assert.equal(scheduled.length, 0, 'quiet hours covering the current minute suppress the sound');
 
-// --- Assertions: title flash and system notification ----------------------------
-// The title-bar flash tracks pending decisions while the page is hidden.
+// --- Assertions: title alert and system notification ----------------------------
+// The title alert tracks pending decisions while the page is hidden, and says so
+// in words rather than a symbol.
 form.value = { ...baseValue(), titleFlash: true };
 document.visibilityState = 'hidden';
 scheduled.length = 0;
 publish([['s6', { running: true, pendingInteraction: { kind: 'approval' } }]]);
-assert.ok(document.title.startsWith('🔔 '), 'a hidden page with a pending decision gets the title prefix');
+assert.ok(document.title.startsWith('待处理 '), 'a hidden page with a pending decision is marked 待处理');
+// The app assigns the whole title when the session title changes; the mark is
+// restored rather than left erased.
+document.title = '某会话 — DeepSeek Harness';
+dispatchTitleMutation();
+assert.ok(document.title.startsWith('待处理 '), 'the mark is restored after the app rewrites the title');
 document.visibilityState = 'visible';
 dispatchDocumentEvent('visibilitychange');
-assert.ok(!document.title.startsWith('🔔 '), 'returning to the page clears the title prefix');
+assert.ok(!document.title.startsWith('待处理 '), 'returning to the page clears the title mark');
+form.value = { ...baseValue() };
+
+// With nothing pending and nothing running, a hidden page is marked as finished.
+form.value = { ...baseValue(), titleFlash: true };
+document.visibilityState = 'hidden';
+publish([['s6', { running: false }]]);
+assert.ok(document.title.startsWith('已完成 '), 'an idle hidden page is marked 已完成');
+// A running session is work in progress, not news, so no mark.
+publish([['s6', { running: true }]]);
+assert.ok(!document.title.startsWith('已完成 '), 'a running session is not marked');
+document.visibilityState = 'visible';
+dispatchDocumentEvent('visibilitychange');
 form.value = { ...baseValue() };
 
 // The system notification carries the interaction's own summary text.
@@ -771,9 +793,27 @@ form.value = { ...baseValue() };
 // --- Assertions: repeat reminder ------------------------------------------------
 // Backdate the clock past the configured interval with a decision still pending.
 form.value = { ...baseValue(), renotify: true, renotifyMinutes: 1 };
-scheduled.length = 0;
+// The earlier assertions left no pending interaction (a session without one
+// clears its tracker entry); establish one again so the reminder has a subject.
+publish([['s7', { running: true, pendingInteraction: { kind: 'question', questions: [{ question: '继续吗？' }] } }]]);
 const realDateNow = Date.now;
+// A reminder only reaches someone looking elsewhere. The clock is pushed past
+// the interval first, so the ONLY thing that can keep this silent is the
+// visibility gate — which is what used to fire right after returning to the
+// window.
+document.visibilityState = 'visible';
+scheduled.length = 0;
 Date.now = () => realDateNow() + 120000;
+try {
+	renotifyChecker();
+} finally {
+	Date.now = realDateNow;
+}
+assert.equal(scheduled.length, 0, 'a visible page is not re-pinged even past the interval');
+
+// Hidden again, past the interval, the reminder fires.
+document.visibilityState = 'hidden';
+Date.now = () => realDateNow() + 180000;
 try {
 	renotifyChecker();
 } finally {
@@ -791,6 +831,7 @@ try {
 	Date.now = realDateNow;
 }
 assert.equal(scheduled.length, 0, 'the repeat reminder is silent while disabled');
+document.visibilityState = 'visible';
 
 // --- Assertions: new presets ----------------------------------------------------
 scheduled.length = 0;
