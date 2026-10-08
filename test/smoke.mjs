@@ -636,6 +636,18 @@ walkElements(tree, (element) => {
 	if (element.type === 'Switch' && element.props.label === 'enabled.title') enabledSwitch = element;
 });
 assert.ok(enabledSwitch, 'the master switch rendered');
+const workingFormSet = form.set;
+form.set = () => {
+	throw new Error('write failed synchronously');
+};
+let escapedWriteThrow = false;
+try {
+	await enabledSwitch.props.onChange(false);
+} catch {
+	escapedWriteThrow = true;
+}
+form.set = workingFormSet;
+assert.equal(escapedWriteThrow, false, 'a synchronous config-write throw becomes a handled save failure');
 await enabledSwitch.props.onChange(false);
 assert.deepEqual(formWrites.filter((write) => write.field === 'enabled'), [{ field: 'enabled', value: false }], 'the master switch writes through the form');
 // Restore the master switch so the status-trigger assertions below fire.
@@ -789,6 +801,16 @@ assert.ok(document.title.startsWith('已完成 '), 'an idle hidden page is marke
 // A running session is work in progress, not news, so no mark.
 publish([['s6', { running: true }]]);
 assert.ok(!document.title.startsWith('已完成 '), 'a running session is not marked');
+// Quiet hours suppress the title alert as well as sounds and notifications.
+form.value = {
+	...baseValue(),
+	titleFlash: true,
+	quietHours: true,
+	quietStart: hhmm(new Date()),
+	quietEnd: hhmm(new Date(Date.now() - 60000)),
+};
+publish([['s6', { running: false }]]);
+assert.ok(!document.title.startsWith('已完成 '), 'quiet hours suppress the title alert');
 document.visibilityState = 'visible';
 dispatchDocumentEvent('visibilitychange');
 form.value = { ...baseValue() };
@@ -944,6 +966,33 @@ assert.deepEqual(
 	],
 	'a decodable file under the cap is stored as base64 with its name',
 );
+// If the second config write is refused, restore the old sound so the name
+// and playable payload cannot describe different uploads.
+const previousSound = form.value.customSound;
+const previousSoundName = form.value.customSoundName;
+const realFormSet = form.set;
+form.set = (field, value) => field === 'customSoundName'
+	? Promise.resolve(false)
+	: realFormSet(field, value);
+const uploadRetryTree = renderTree(section.component({
+	useConfig: (selector) => selector(form.getSnapshot()),
+	setField: injected.setField,
+	preview: injected.preview,
+	t: (key) => key,
+}));
+let retryFileInput;
+walkElements(uploadRetryTree, (element) => {
+	if (element.type === 'input' && element.props.type === 'file') retryFileInput = element;
+});
+await retryFileInput.props.onChange({
+	currentTarget: {
+		files: [{ name: 'replacement.mp3', size: 10, arrayBuffer: async () => new TextEncoder().encode('good-audio').buffer }],
+		value: 'x',
+	},
+});
+form.set = realFormSet;
+assert.equal(form.value.customSound, previousSound, 'a refused name write rolls the sound payload back');
+assert.equal(form.value.customSoundName, previousSoundName, 'a refused name write keeps the old display name');
 // An oversized file is rejected before any write.
 const writesBefore = formWrites.length;
 const bigFile = { name: 'big.mp3', size: 600000, arrayBuffer: async () => new ArrayBuffer(8) };
@@ -963,6 +1012,34 @@ await fileInput.props.onChange({
 });
 assert.equal(formWrites.length, writesBeforeNoDecoder, 'an environment without audio decoding refuses the upload');
 globalThis.window.AudioContext.prototype.decodeAudioData = realDecode;
+
+// Removing a custom sound performs ordered writes and restores the sound if
+// clearing the display name is refused.
+form.value = {
+	...baseValue(),
+	customSound: previousSound,
+	customSoundName: previousSoundName,
+	decisionSound: 'custom',
+	questionSound: 'custom',
+	completionSound: 'custom',
+};
+const getCustomRow = () => {
+	const currentTree = renderTree(section.component({
+		useConfig: (selector) => selector(form.getSnapshot()),
+		setField: injected.setField,
+		preview: injected.preview,
+		t: (key) => key,
+	}));
+	return currentTree.children[0][2].children[0][6];
+};
+const realRemoveFormSet = form.set;
+form.set = (field, value) => field === 'customSoundName'
+	? Promise.resolve(false)
+	: realRemoveFormSet(field, value);
+await getCustomRow().props.onRemove();
+form.set = realRemoveFormSet;
+assert.equal(form.value.customSound, previousSound, 'a refused removal-name write restores the sound payload');
+assert.equal(form.value.customSoundName, previousSoundName, 'a refused removal-name write preserves the display name');
 
 // A write through the section's setField reaches the form.
 await injected.setField('volume', 42);
