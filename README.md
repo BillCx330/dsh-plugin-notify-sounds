@@ -96,6 +96,7 @@ For anyone hacking on the code (exact details live in the source comments):
 
 ## Changelog
 
+- **v1.4.3** (2026-10-08) Three fixes: an upload is no longer accepted when the environment cannot decode audio (it could never play anyway); a synchronous throw from the notification-permission request is handled like a denial instead of escaping; quiet hours only accept valid `HH:MM`, and a throwing native window raise now falls through to the deep-link fallback. Plus two regression tests and a decode-error message that names both causes.
 - **v1.4.2** (2026-10-07) Clean release point: the `v1.4.1` tag was re-pinned during publishing, so this republishes under a tag downstream can trust. No behaviour change.
 - **v1.4.1** (2026-10-07) Removed the "could not raise the window" notice — it misfired even when the window came back, and success is its own feedback; a notification click is now fully silent. Also: the READMEs are rewritten as a release page.
 - **v1.4.0** (2026-10-07) Seen once, never repeated; fixed notification clicks doing nothing (root cause: platform `tag` replacement swallowing the click); new **Sub-agent alerts** toggle; plus five smaller fixes.

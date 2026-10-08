@@ -949,6 +949,20 @@ const writesBefore = formWrites.length;
 const bigFile = { name: 'big.mp3', size: 600000, arrayBuffer: async () => new ArrayBuffer(8) };
 await fileInput.props.onChange({ currentTarget: { files: [bigFile], value: 'x' } });
 assert.equal(formWrites.length, writesBefore, 'an oversized file is rejected without writes');
+// Without audio decoding the environment can never play a custom sound, so
+// accepting the upload would store a ringtone that stays silent forever. The
+// decoder is removed from the mock engine's prototype for this one check.
+const realDecode = globalThis.window.AudioContext.prototype.decodeAudioData;
+delete globalThis.window.AudioContext.prototype.decodeAudioData;
+const writesBeforeNoDecoder = formWrites.length;
+await fileInput.props.onChange({
+	currentTarget: {
+		files: [{ name: 'fine.mp3', size: 10, arrayBuffer: async () => new TextEncoder().encode('good-audio').buffer }],
+		value: 'x',
+	},
+});
+assert.equal(formWrites.length, writesBeforeNoDecoder, 'an environment without audio decoding refuses the upload');
+globalThis.window.AudioContext.prototype.decodeAudioData = realDecode;
 
 // A write through the section's setField reaches the form.
 await injected.setField('volume', 42);
@@ -990,6 +1004,25 @@ assert.deepEqual(
 	formWrites.slice(writesBeforePermission),
 	[{ field: 'systemNotify', value: false }],
 	'a refused permission request leaves the switch off instead of throwing',
+);
+// The same verdict when requestPermission throws SYNCHRONOUSLY: the throw has
+// to land in the rejection path instead of escaping the handler untouched.
+Notification.requestPermission = () => {
+	throw new Error('denied synchronously');
+};
+const writesBeforeThrow = formWrites.length;
+let threwFromPermission = false;
+try {
+	await systemNotifySwitch.props.onChange(true);
+} catch {
+	threwFromPermission = true;
+}
+Notification.requestPermission = realRequestPermission;
+assert.equal(threwFromPermission, false, 'a synchronous throw from requestPermission does not escape');
+assert.deepEqual(
+	formWrites.slice(writesBeforeThrow),
+	[{ field: 'systemNotify', value: false }],
+	'and the switch still settles on off',
 );
 
 // --- Assertions: sub-agent alerts ----------------------------------------------
