@@ -95,6 +95,7 @@ The command line writes `dsh.profile.bundles` and installs the dependency for yo
 
 - **Hand-edited config**: preferences live in the profile's `cordis.patch.yml`; values must match the schema (volume 0–100, a preset id, `HH:MM` times) or the plugin declines to load — just fix the value. The settings UI only ever writes valid values.
 - **Multiple windows** fire independently: the same event may chime once per window; turn on notify-only-when-hidden to avoid it.
+- **Quiet hours hold reminders, they do not drop them**: a repeat reminder that becomes due during the quiet range fires right after it ends, and several pending decisions can fire at once then.
 - **Click-to-return** is fully implemented and tested on Windows; macOS / Linux fall back to the system deep link and are unverified.
 - **The window is found by its title** — deliberately without inspecting other processes (that trips security software). If DSH ever changes its title format, click-to-return silently stops working; sounds and notifications are unaffected.
 - **The nav glyph** depends on the settings panel's DOM structure and silently falls back to the official gear after a DSH redesign — cosmetic only.
@@ -109,12 +110,14 @@ For anyone hacking on the code (exact details live in the source comments):
 - **Repeat cadence**: unanswered decisions are checked every 15s; **seen means done** — appearing while you are at the window, or coming back to it, ends the reminders for good (switching away does not re-arm); a new question replacing an old one resets the timer.
 - **Click-to-return**: a renderer cannot raise an OS window, so a click POSTs to the Host's fenced `/notify-sounds/focus` route and the Host raises it. On Windows the Host calls `user32.dll` through DSH's own bundled `koffi` (no new dependency, window calls only, no PowerShell — that shape trips security software and gets blamed on DSH); Desktop vs browser is derived from the `Origin` header, so a browser click never drags the Desktop window forward.
 - **Notification collapsing**: the `tag` is not handed to the platform (a superseded toast swallows clicks aimed at it); the plugin closes the old notification itself and holds every generation's object so a late click always has a handler.
-- **Title mark**: prefix add/remove only, so DSH's own title management is untouched; the written prefix is remembered verbatim, so a language switch neither stacks nor leaks it.
-- **Cooldown and robustness**: the same trigger does not fire twice within 2s; volume is guarded with `Number.isFinite` (a hand-edited `.nan` falls back to the default); a refused write snaps the control back and shows an error row; toggles disable mid-write against double-tap races.
+- **Title mark**: prefix add/remove only, so DSH's own title management is untouched; the written prefix is remembered verbatim, so a language switch neither stacks nor leaks it. "Finished" is unread news — set by a finish that happens while the page is hidden, retired when you return — not a standing idle fact, so it does not reappear on every later switch-away.
+- **Cooldown and robustness**: the same trigger does not fire twice within 2s for the same session (a second conversation's decision still rings); volume is guarded with `Number.isFinite` (a hand-edited `.nan` falls back to the default); a refused write snaps the control back and shows an error row; toggles disable mid-write against double-tap races.
 - **The volume slider** is uncontrolled: dragging paints one CSS custom property and only the release commits, so it never stutters or snaps back.
 - **Theme and layout**: `--dsw-alias-*` tokens throughout, section and row geometry copied from the official preference pages; sound pickers use the official `Menu` dropdown so nothing scrolls sideways.
 
 ## Changelog
+
+- **v1.5.0** (2026-10-08) The "finished" title mark is unread news now — set by a finish that happens while you are away, cleared when you return — instead of reappearing on every switch-away. The retrigger cooldown is per session, so two conversations deciding within 2 seconds both ring. The Host half gained tests (Config schema, focus route, title matching) that cross-check the shared constants between the halves; the sessions provider is now an explicit load prerequisite, and quiet-hours catch-up is documented.
 
 - **v1.4.4** (2026-10-08) Quiet hours now suppress the taskbar title alert too, and the title refreshes as the quiet-hours window begins or ends. Custom-sound upload/removal writes are ordered and roll back on refusal; synchronous config-write errors are handled as save failures.
 - **v1.4.3** (2026-10-08) Three fixes: an upload is no longer accepted when the environment cannot decode audio (it could never play anyway); a synchronous throw from the notification-permission request is handled like a denial instead of escaping; quiet hours only accept valid `HH:MM`, and a throwing native window raise now falls through to the deep-link fallback. Plus two regression tests and a decode-error message that names both causes.
@@ -135,7 +138,9 @@ For anyone hacking on the code (exact details live in the source comments):
 ## Development
 
 ```powershell
-node test/smoke.mjs   # assembly, triggers, cooldown, quiet hours, repeat reminders, notification clicks, sub-agent filtering
+npm install             # once: the Host tests need the schemastery devDependency
+node test/smoke.mjs     # client half: assembly, triggers, cooldown, quiet hours, repeat reminders, notification clicks, sub-agent filtering
+node test/host.mjs      # host half: config schema, focus route, title matching, cross-half contracts
 ```
 
 ```
@@ -145,10 +150,12 @@ dsh-plugin-notify-sounds/
 ├── lib/
 │   ├── index.js        # Host half: config schema + click-to-return route
 │   └── client.js       # Client half: sound engine, status watcher, settings section
-└── test/smoke.mjs
+└── test/
+    ├── smoke.mjs       # client half
+    └── host.mjs        # host half
 ```
 
-`package.json` is publishable as-is (`files` carries runtime artifacts only, `@deepseek-ai/schemastery` is a peerDependency, pure ESM with no build step) — `npm publish` whenever you want it on npm.
+`package.json` is publishable as-is (`files` carries runtime artifacts only, `@deepseek-ai/schemastery` is a peerDependency plus a devDependency copy for the Host tests, pure ESM with no build step) — `npm publish` whenever you want it on npm.
 
 ## License
 

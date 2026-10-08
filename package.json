@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-notify-sounds",
-  "version": "1.4.4",
+  "version": "1.5.0",
   "description": "Notification sounds for DeepSeek Harness — a soft chime when the agent needs your decision or finishes a task, with a Settings section styled like DSH's own · 需要决策或任务完成时播放提示音，点击系统通知可回到窗口，设置面板可调音量与音效",
   "type": "module",
   "main": "lib/index.js",
@@ -40,6 +40,9 @@
   "peerDependencies": {
     "@deepseek-ai/schemastery": "^3.18.1"
   },
+  "devDependencies": {
+    "@deepseek-ai/schemastery": "^3.18.4"
+  },
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
@@ -47,6 +50,7 @@
     "client": {
       "inject": [
         "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-api-session-controller",
         "@deepseek-ai/dsh-client-ui-session",
         "@deepseek-ai/dsh-client-ui-settings",
         "@deepseek-ai/dsh-client-ui-settings-general",

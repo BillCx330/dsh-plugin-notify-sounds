@@ -3,11 +3,11 @@
  *
  * Loads the Client half inside a stubbed Module Loader environment, applies it
  * against mock services and a fake DOM, and asserts the wiring: dictionaries,
- * the session-status watcher, the Settings section registration, the nav
- * glyph swap (alarm clock instead of the shared fallback gear), the
- * uncontrolled volume slider (drag paints without re-rendering, commits once
- * per gesture), and the Web Audio scheduling (against a recording
- * AudioContext mock).
+ * the session-status watcher (per-session retrigger cooldown, unread-finish
+ * title semantics), the Settings section registration, the nav glyph swap
+ * (alarm clock instead of the shared fallback gear), the uncontrolled volume
+ * slider (drag paints without re-rendering, commits once per gesture), and
+ * the Web Audio scheduling (against a recording AudioContext mock).
  *
  * Run: node test/smoke.mjs
  */
@@ -227,6 +227,11 @@ globalThis.Notification = class {
 
 let currentPanel = null;
 const documentListeners = {};
+// A real <title> element: observeTitle() finds it through querySelector, so
+// the title observer is genuinely attached while an alert is wanted. (A page
+// without one is the edge the observeTitle fix covers: the observer must not
+// be created until the element exists.)
+const titleElement = fakeNode('TITLE');
 globalThis.document = {
 	body: fakeNode('BODY'),
 	head: fakeNode('HEAD'),
@@ -241,6 +246,7 @@ globalThis.document = {
 	},
 	querySelector(selector) {
 		if (selector === '[data-shortcut-modal="settings"]') return currentPanel;
+		if (selector === 'title') return titleElement;
 		return null;
 	},
 	createElement(tag) {
@@ -685,6 +691,15 @@ assert.equal(scheduled.length, 4, 'bell preset schedules four voices (two notes 
 scheduled.length = 0;
 publish([['s1', { running: true, pendingInteraction: { kind: 'approval', key: 'approval:2' }, completionUnread: false }]]);
 assert.equal(scheduled.length, 0, 'retrigger cooldown suppresses the second decision sound');
+// The cooldown is per session: another conversation asking within the same
+// window is a second event, not an echo — it fires too. (s1 stays in the
+// snapshot so its own running → idle edge below still registers.)
+scheduled.length = 0;
+publish([
+	['s1', { running: true, pendingInteraction: { kind: 'approval', key: 'approval:2' }, completionUnread: false }],
+	['s2', { running: true, pendingInteraction: { kind: 'approval' }, completionUnread: false }],
+]);
+assert.equal(scheduled.length, 4, 'a decision from another session within the window still fires');
 
 // Completion trigger: running -> idle (after the cooldown window).
 await new Promise((resolve) => {
@@ -793,11 +808,21 @@ dispatchDocumentEvent('visibilitychange');
 assert.ok(!document.title.startsWith('待处理 '), 'returning to the page clears the title mark');
 form.value = { ...baseValue() };
 
-// With nothing pending and nothing running, a hidden page is marked as finished.
+// The "finished" mark is unread news, not a standing idle fact.
 form.value = { ...baseValue(), titleFlash: true };
-document.visibilityState = 'hidden';
+// A finish the user watches happen is not news: the edge fires while the page
+// is visible, so hiding afterwards must not mark it.
 publish([['s6', { running: false }]]);
-assert.ok(document.title.startsWith('已完成 '), 'an idle hidden page is marked 已完成');
+document.visibilityState = 'hidden';
+dispatchDocumentEvent('visibilitychange');
+assert.ok(!document.title.startsWith('已完成 '), 'a finish watched while visible does not mark after hiding');
+// Hiding over an OLD finish is not news either: no new edge, no mark.
+publish([['s6', { running: false }]]);
+assert.ok(!document.title.startsWith('已完成 '), 'an idle hidden page with no unread finish is not marked');
+// A finish that happens while the page is hidden IS news.
+publish([['s6', { running: true }]]);
+publish([['s6', { running: false }]]);
+assert.ok(document.title.startsWith('已完成 '), 'a finish while the page is hidden is marked 已完成');
 // A running session is work in progress, not news, so no mark.
 publish([['s6', { running: true }]]);
 assert.ok(!document.title.startsWith('已完成 '), 'a running session is not marked');
@@ -811,6 +836,15 @@ form.value = {
 };
 publish([['s6', { running: false }]]);
 assert.ok(!document.title.startsWith('已完成 '), 'quiet hours suppress the title alert');
+// Returning to the page retires the mark — and it does NOT come back on the
+// next switch-away: the finish has been seen.
+document.visibilityState = 'visible';
+dispatchDocumentEvent('visibilitychange');
+assert.ok(!document.title.startsWith('已完成 '), 'returning clears the mark');
+form.value = { ...baseValue(), titleFlash: true };
+document.visibilityState = 'hidden';
+dispatchDocumentEvent('visibilitychange');
+assert.ok(!document.title.startsWith('已完成 '), 'a seen finish does not re-mark on the next switch-away');
 document.visibilityState = 'visible';
 dispatchDocumentEvent('visibilitychange');
 form.value = { ...baseValue() };
