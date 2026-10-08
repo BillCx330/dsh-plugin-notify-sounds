@@ -9,8 +9,10 @@
 
 人不在窗口前也不怕：后台弹系统通知（**点击即回到窗口**），任务栏标题亮出「待处理 / 已完成」；你回来看过一眼之后，它就闭嘴——不会像闹钟一样反复催你。
 
-```sh
-dsh plugin --profile <你的 profile> add github:BillCx330/dsh-plugin-notify-sounds
+**安装**：DSH → 设置 → 插件 → 添加插件，粘贴下面这行，点「安装」：
+
+```
+https://github.com/BillCx330/dsh-plugin-notify-sounds
 ```
 
 ---
@@ -51,9 +53,27 @@ DSH 的状态提示只有视觉——状态点、侧栏标记。你一切到别�
 
 ## 安装
 
-四种方式任选其一（目前只发布在 GitHub）：
+### 最简单：在 DSH 里点两下（推荐）
 
-**命令行**（推荐）
+1. 打开 DSH → **设置 → 插件**，点**添加插件**；
+2. 在输入框粘贴：
+
+   ```
+   https://github.com/BillCx330/dsh-plugin-notify-sounds
+   ```
+
+   （粘贴的就是「GitHub 仓库地址」；填 `github:BillCx330/dsh-plugin-notify-sounds` 或本地目录路径也可以）
+3. 点**安装**，装完**重启 DSH** 一次。
+
+输入框上方的「安装源」是下载源，默认中国大陆镜像源，国内一般不用改。DSH 会提示「插件以你的权限运行」——本插件只读会话状态、在本地发声；唯一的请求是点击系统通知时发给**本机 DSH** 的唤窗请求，不向外部发送任何数据。
+
+### 升级
+
+**装完不支持自动更新**：要升级请先在同一处**卸载**旧版，再按上面的步骤装新版。
+
+### 其他安装方式
+
+**命令行** —— 对你实际使用的 profile 一条命令：
 
 ```sh
 dsh plugin --profile <你的 profile> add github:BillCx330/dsh-plugin-notify-sounds
@@ -67,9 +87,9 @@ dsh plugin --profile <你的 profile> add github:BillCx330/dsh-plugin-notify-sou
 dsh plugin --profile <你的 profile> add ./dsh-plugin-notify-sounds
 ```
 
-**手工编辑** —— 在 profile 的 `package.json` 的 `dependencies` 加 `"dsh-plugin-notify-sounds": "github:BillCx330/dsh-plugin-notify-sounds"`，并在 `dsh.profile.bundles` 追加 `"dsh-plugin-notify-sounds"`。
+**手工编辑** —— 在 profile 的 `package.json` 的 `dependencies` 加 `"dsh-plugin-notify-sounds": "github:BillCx330/dsh-plugin-notify-sounds"`，在 `dsh.profile.bundles` 追加 `"dsh-plugin-notify-sounds"`，然后在 profile 目录跑一次包安装（如 `pnpm install`）把依赖装进 `node_modules`。
 
-命令行方式会自动写入 `dsh.profile.bundles`，无需手工编辑。包内直接带预构建产物、不声明任何生命周期脚本，安装过程不执行构建脚本。安装后**重启 DSH**（日常升级仅客户端改动时，可热更生效）。
+命令行方式会自动写入 `dsh.profile.bundles` 并装好依赖，无需手工编辑。包内直接带预构建产物、不声明任何生命周期脚本，安装过程不执行构建脚本。安装后**重启 DSH**（日常升级仅客户端改动时，可热更生效）。
 
 ## 已知边界
 

@@ -9,8 +9,10 @@ English | [中文](README.zh.md)
 
 Walk away from the window without missing anything: an OS notification in the background (**click it to jump back**), and a "Waiting for you" / "Finished" mark on the taskbar title. Once you have seen it, the plugin goes quiet — it will not nag you like an alarm clock.
 
-```sh
-dsh plugin --profile <your profile> add github:BillCx330/dsh-plugin-notify-sounds
+**Install**: DSH → Settings → Plugins → Add plugin, paste the line below and press **Install**:
+
+```
+https://github.com/BillCx330/dsh-plugin-notify-sounds
 ```
 
 ---
@@ -51,9 +53,27 @@ Everything applies immediately — no restart needed.
 
 ## Install
 
-Pick one (currently published on GitHub only):
+### Simplest: two clicks inside DSH (recommended)
 
-**Command line** (recommended)
+1. In DSH open **Settings → Plugins** and press **Add plugin**;
+2. Paste this into the box:
+
+   ```
+   https://github.com/BillCx330/dsh-plugin-notify-sounds
+   ```
+
+   (that is the "GitHub repository address" the box asks for; `github:BillCx330/dsh-plugin-notify-sounds` or a local directory path work too)
+3. Press **Install**, then **restart DSH** once.
+
+The "install source" dropdown above the box picks the download mirror (mainland China mirror by default; leave it alone unless downloads are slow). DSH warns that a plugin runs with your permissions — this one only reads session state and plays sounds locally; its single request goes to **your own DSH** to raise the window when you click a notification, and nothing is sent anywhere else.
+
+### Upgrading
+
+**There is no auto-update**: to upgrade, **uninstall** the old version from the same place first, then install the new one as above.
+
+### Other ways
+
+**Command line** — one command against the profile you actually use:
 
 ```sh
 dsh plugin --profile <your profile> add github:BillCx330/dsh-plugin-notify-sounds
@@ -67,9 +87,9 @@ dsh plugin --profile <your profile> add github:BillCx330/dsh-plugin-notify-sound
 dsh plugin --profile <your profile> add ./dsh-plugin-notify-sounds
 ```
 
-**By hand** — add `"dsh-plugin-notify-sounds": "github:BillCx330/dsh-plugin-notify-sounds"` to `dependencies` in the profile's `package.json`, and append `"dsh-plugin-notify-sounds"` to `dsh.profile.bundles`.
+**By hand** — add `"dsh-plugin-notify-sounds": "github:BillCx330/dsh-plugin-notify-sounds"` to `dependencies` in the profile's `package.json`, append `"dsh-plugin-notify-sounds"` to `dsh.profile.bundles`, then run a package install (e.g. `pnpm install`) in the profile directory so the dependency lands in `node_modules`.
 
-The command line writes `dsh.profile.bundles` for you. The package ships prebuilt artifacts and declares no lifecycle scripts, so nothing is built at install time. **Restart DSH** after installing (everyday upgrades that touch only the client half hot-reload).
+The command line writes `dsh.profile.bundles` and installs the dependency for you. The package ships prebuilt artifacts and declares no lifecycle scripts, so nothing is built at install time. **Restart DSH** after installing (everyday upgrades that touch only the client half hot-reload).
 
 ## Known limitations
 
