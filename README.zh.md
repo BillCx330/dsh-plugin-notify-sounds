@@ -1,5 +1,7 @@
 # dsh-plugin-notify-sounds
 
+[![npm version](https://img.shields.io/npm/v/dsh-plugin-notify-sounds.svg)](https://www.npmjs.com/package/dsh-plugin-notify-sounds)
+[![npm downloads](https://img.shields.io/npm/dm/dsh-plugin-notify-sounds.svg)](https://www.npmjs.com/package/dsh-plugin-notify-sounds)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![DeepSeek Harness plugin](https://img.shields.io/badge/dsh-plugin-8b5cf6.svg)](https://github.com/deepseek-ai/deepseek-harness)
 
@@ -12,7 +14,7 @@
 **安装**：DSH → 设置 → 插件 → 添加插件，粘贴下面这行，点「安装」：
 
 ```
-https://github.com/BillCx330/dsh-plugin-notify-sounds
+dsh-plugin-notify-sounds
 ```
 
 ---
@@ -56,13 +58,13 @@ DSH 的状态提示只有视觉——状态点、侧栏标记。你一切到别�
 ### 最简单：在 DSH 里点两下（推荐）
 
 1. 打开 DSH → **设置 → 插件**，点**添加插件**；
-2. 在输入框粘贴：
+2. 在输入框粘贴包名（本插件已发布在 [npm](https://www.npmjs.com/package/dsh-plugin-notify-sounds)）：
 
    ```
-   https://github.com/BillCx330/dsh-plugin-notify-sounds
+   dsh-plugin-notify-sounds
    ```
 
-   （粘贴的就是「GitHub 仓库地址」；填 `github:BillCx330/dsh-plugin-notify-sounds` 或本地目录路径也可以）
+   （填 GitHub 仓库地址 `https://github.com/BillCx330/dsh-plugin-notify-sounds` 或本地目录路径也可以）
 3. 点**安装**，装完**重启 DSH** 一次。
 
 输入框上方的「安装源」是下载源，默认中国大陆镜像源，国内一般不用改。DSH 会提示「插件以你的权限运行」——本插件只读会话状态、在本地发声；唯一的请求是点击系统通知时发给**本机 DSH** 的唤窗请求，不向外部发送任何数据。
@@ -142,6 +144,8 @@ npm install             # 一次性：宿主测试需要 schemastery 开发依�
 node test/smoke.mjs     # 客户端半：装配、触发、冷却、静音、重复提醒、通知点击、子智能体过滤
 node test/host.mjs      # 宿主半：配置 schema、唤窗路由、标题匹配、两半契约交叉校验
 ```
+
+发布到 npm：升好版本号后 `npm publish`（首次发布先 `npm login` 并按提示开启 2FA）。**npm 的版本号不可覆盖**——有任何改动都请升版本再发。
 
 ```
 dsh-plugin-notify-sounds/

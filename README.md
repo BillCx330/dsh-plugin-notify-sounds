@@ -1,5 +1,7 @@
 # dsh-plugin-notify-sounds
 
+[![npm version](https://img.shields.io/npm/v/dsh-plugin-notify-sounds.svg)](https://www.npmjs.com/package/dsh-plugin-notify-sounds)
+[![npm downloads](https://img.shields.io/npm/dm/dsh-plugin-notify-sounds.svg)](https://www.npmjs.com/package/dsh-plugin-notify-sounds)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![DeepSeek Harness plugin](https://img.shields.io/badge/dsh-plugin-8b5cf6.svg)](https://github.com/deepseek-ai/deepseek-harness)
 
@@ -12,7 +14,7 @@ Walk away from the window without missing anything: an OS notification in the ba
 **Install**: DSH → Settings → Plugins → Add plugin, paste the line below and press **Install**:
 
 ```
-https://github.com/BillCx330/dsh-plugin-notify-sounds
+dsh-plugin-notify-sounds
 ```
 
 ---
@@ -56,13 +58,13 @@ Everything applies immediately — no restart needed.
 ### Simplest: two clicks inside DSH (recommended)
 
 1. In DSH open **Settings → Plugins** and press **Add plugin**;
-2. Paste this into the box:
+2. Paste the package name into the box (this plugin is published on [npm](https://www.npmjs.com/package/dsh-plugin-notify-sounds)):
 
    ```
-   https://github.com/BillCx330/dsh-plugin-notify-sounds
+   dsh-plugin-notify-sounds
    ```
 
-   (that is the "GitHub repository address" the box asks for; `github:BillCx330/dsh-plugin-notify-sounds` or a local directory path work too)
+   (the GitHub repository address `https://github.com/BillCx330/dsh-plugin-notify-sounds` or a local directory path work too)
 3. Press **Install**, then **restart DSH** once.
 
 The "install source" dropdown above the box picks the download mirror (mainland China mirror by default; leave it alone unless downloads are slow). DSH warns that a plugin runs with your permissions — this one only reads session state and plays sounds locally; its single request goes to **your own DSH** to raise the window when you click a notification, and nothing is sent anywhere else.
@@ -142,6 +144,8 @@ npm install             # once: the Host tests need the schemastery devDependenc
 node test/smoke.mjs     # client half: assembly, triggers, cooldown, quiet hours, repeat reminders, notification clicks, sub-agent filtering
 node test/host.mjs      # host half: config schema, focus route, title matching, cross-half contracts
 ```
+
+To publish to npm: bump the version, then `npm publish` (`npm login` and 2FA the first time). **npm versions are immutable** — bump for every change.
 
 ```
 dsh-plugin-notify-sounds/
