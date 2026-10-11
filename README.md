@@ -19,11 +19,11 @@ dsh-plugin-notify-sounds
 
 ---
 
-## Consistent with DSH's own UI
+## 🎨 Consistent with DSH's design language
 
 Every visual detail of the settings section comes from DSH's own design system: row geometry, dividers, type sizes and spacing use the official design tokens, the sound picker is the official `Menu` primitive, the icons come from the official family, and the layout follows the native text-left, control-right row shape. Installing it does not introduce a visually disjoint third-party block into your settings.
 
-## What it does
+## ✨ What it can do
 
 | What | What you get |
 |---|---|
@@ -34,21 +34,21 @@ Every visual detail of the settings section comes from DSH's own design system: 
 | **Only what you care about** | Sub-agents (background tasks) are completely silent by default — only your own conversation is announced |
 | **Quiet when it should be** | Quiet hours (e.g. 22:00–08:00, wrapping past midnight), notify-only-when-hidden, and a master switch |
 | **Your sound, your way** | Nine built-in sounds, custom ringtone upload, volume — each feature with its own toggle |
-| **Updates itself** | Check npm for a new version and install it in one click: verified against the published digest before anything is replaced, restored on failure; restart DSH to load it |
+| **Update checks** | Check npm for a new version and install it in one click: verified against the published digest before anything is replaced, restored on failure; restart DSH to load it |
 
-## Why
+## 💡 Why
 
 DSH tells you things visually — status dots, sidebar marks. The moment you switch to another window, you can neither see nor hear anything, while the agent may be stuck waiting for one sentence from you.
 
 This plugin turns "it is waiting for you" and "it is done" into sound. With system notifications and the title mark you know what happened even while away; and once you come back and see it, it goes quiet — the repeat reminder only chases decisions you have **never** seen.
 
-## Sounds
+## 🔔 Sounds
 
 Bell · Chime · Ding · Drop · Pulse · Arc · Coin · Success · Knock — nine built-in sounds, all synthesized live with Web Audio: no audio files, no network requests.
 
 Or upload your own ringtone (mp3/wav/ogg, ≤512KB, validated and volume-normalized automatically), or pick "None" for notifications only. Each trigger (approval / question / completion) gets its own sound, with preview right in the settings.
 
-## Settings
+## ⚙️ Settings
 
 Settings → **Sounds** (between General and Models). Every feature has its own toggle, styled exactly like DSH's own preference pages:
 
@@ -56,9 +56,9 @@ master switch and volume · per-trigger sounds with preview · sub-agent alerts 
 
 Everything applies immediately — no restart needed.
 
-## Install
+## 📦 Install
 
-### Simplest: two clicks inside DSH (recommended)
+### 🖱️ Simplest: two clicks inside DSH (recommended)
 
 1. In DSH open **Settings → Plugins** and press **Add plugin**;
 2. Paste the package name into the box (this plugin is published on [npm](https://www.npmjs.com/package/dsh-plugin-notify-sounds)):
@@ -72,11 +72,11 @@ Everything applies immediately — no restart needed.
 
 The "install source" dropdown above the box picks the download mirror (mainland China mirror by default; leave it alone unless downloads are slow). DSH warns that a plugin runs with your permissions — this one only reads session state and plays sounds locally; its single request goes to **your own DSH** to raise the window when you click a notification, and nothing is sent anywhere else.
 
-### Upgrading
+### ⬆️ Upgrading
 
 DSH does not update plugins on its own, but this plugin **updates itself**: Settings → Sounds → Updates can check for a new version and install it in one click. Uninstalling and installing again also works.
 
-### Other ways
+### 🛠️ Other ways
 
 **Command line** — one command against the profile you actually use:
 
@@ -96,33 +96,34 @@ dsh plugin --profile <your profile> add ./dsh-plugin-notify-sounds
 
 The command line writes `dsh.profile.bundles` and installs the dependency for you. The package ships prebuilt artifacts and declares no lifecycle scripts, so nothing is built at install time. **Restart DSH** after installing (everyday upgrades that touch only the client half hot-reload).
 
-## Known limitations
+## ⚠️ Known limitations
 
 - **Hand-edited config**: preferences live in the profile's `cordis.patch.yml`; values must match the schema (volume 0–100, a preset id, `HH:MM` times) or the plugin declines to load — just fix the value. The settings UI only ever writes valid values.
 - **One-click update only swaps files**: it replaces the seven files this package ships and **never touches the profile's configuration**. Downloaded code is never executed — the new code loads on a **DSH restart**. Let the row report a result before closing the window (an interrupted update restores itself, but there is no reason to gamble); if a future release adds a dependency, that needs installing separately (this one has none).
 - **Multiple windows** fire independently: the same event may chime once per window; turn on notify-only-when-hidden to avoid it.
-- **Quiet hours hold reminders, they do not drop them**: a repeat reminder that becomes due during the quiet range fires right after it ends, and several pending decisions can fire at once then.
 - **Click-to-return** is fully implemented and tested on Windows; macOS / Linux fall back to the system deep link and are unverified.
 - **The window is found by its title** — deliberately without inspecting other processes (that trips security software). If DSH ever changes its title format, click-to-return silently stops working; sounds and notifications are unaffected.
 - **The nav glyph** depends on the settings panel's DOM structure and silently falls back to the official gear after a DSH redesign — cosmetic only.
 - **Notification permission** is granted on the Desktop; under restrictive policies the row shows how to allow it manually, everything else keeps working.
 - **Upgrading from v1.0.0**: since v1.1.0 approvals and questions are separate tracks, so questions default to "Chime" instead of "Bell" — change it back in settings if you prefer.
 
-## Design notes
+## 🧩 Design notes
 
 For anyone hacking on the code (exact details live in the source comments):
 
 - **Triggers never touch the event waterfall**: approval/question requests are waterfall events that a late listener can miss, so this plugin reads `uiSession.sessionStatus` (the same aggregated pending/running facts the sidebar status dots use) and just observes.
-- **Repeat cadence**: unanswered decisions are checked every 15s; **seen means done** — appearing while you are at the window, or coming back to it, ends the reminders for good (switching away does not re-arm); a new question replacing an old one resets the timer.
+- **Repeat cadence**: unanswered decisions are checked every 15s; **seen means done** — appearing while you are at the window, or coming back to it, ends the reminders for good (switching away does not re-arm); a new question replacing an old one resets the timer. A reminder that comes due during quiet hours is dropped rather than deferred.
 - **Click-to-return**: a renderer cannot raise an OS window, so a click POSTs to the Host's fenced `/notify-sounds/focus` route and the Host raises it. On Windows the Host calls `user32.dll` through DSH's own bundled `koffi` (no new dependency, window calls only, no PowerShell — that shape trips security software and gets blamed on DSH); Desktop vs browser is derived from the `Origin` header, so a browser click never drags the Desktop window forward.
 - **Notification collapsing**: the `tag` is not handed to the platform (a superseded toast swallows clicks aimed at it); the plugin closes the old notification itself and holds every generation's object so a late click always has a handler.
 - **Title mark**: prefix add/remove only, so DSH's own title management is untouched; the written prefix is remembered verbatim, so a language switch neither stacks nor leaks it. "Finished" is unread news — set by a finish that happens while the page is hidden, retired when you return — not a standing idle fact, so it does not reappear on every later switch-away.
+- **Quiet hours mean forgotten, not queued**: a decision or finish that arrives during the quiet range is not recorded at all — no sound, no notification, no title mark — and nothing that was missed overnight is delivered when the window ends.
 - **Cooldown and robustness**: the same trigger does not fire twice within 2s for the same session (a second conversation's decision still rings); volume is guarded with `Number.isFinite` (a hand-edited `.nan` falls back to the default); a refused write snaps the control back and shows an error row; toggles disable mid-write against double-tap races.
 - **The volume slider** is uncontrolled: dragging paints one CSS custom property and only the release commits, so it never stutters or snaps back.
 - **Theme and layout**: `--dsw-alias-*` tokens throughout, section and row geometry copied from the official preference pages; sound pickers use the official `Menu` dropdown so nothing scrolls sideways.
 
-## Changelog
+## 📜 Changelog
 
+- **v1.6.5** (2026-10-11) Quiet hours now mean forgotten, not queued: decisions and finishes that arrive during the quiet range get no reminder and no title mark, and nothing that was missed overnight is delivered when the window ends; reminders that come due inside it are dropped rather than deferred. The update outcome now appears at the top of the section (visible the moment the page reloads, no scrolling), and the update row's copy is simpler.
 - **v1.6.4** (2026-10-11) No more scrolling to find the news: an update swaps the plugin's own client file and the page reloads at the top, so the row now scrolls itself back into view when the outcome appears.
 - **v1.6.3** (2026-10-11) The update-success message no longer flashes and vanishes: the Host remembers the install and repeats it with every check, so "Updated, restart DSH to load it" survives the page reload the update itself triggers (it swaps the client half's own file) and stays until the restart. The cached check is invalidated after an install too, so the row can no longer claim a newer version than the one it just wrote.
 - **v1.6.2** (2026-10-11) Fixed one-click update always failing when the mainland mirror answered the check: the mirror serves its tarballs from its CDN, and the downloader refused every redirect — so the download could never finish (found by the live drill). Redirects are now followed one hop at a time with every hop checked against the trusted hosts (the mirror's CDN is the one legitimate hop); the sha512 check is unchanged. A failure now names the stage it died at (check / download / verify / unpack / replace).
@@ -146,7 +147,7 @@ For anyone hacking on the code (exact details live in the source comments):
 - **v1.1.0** (2026-10-05) Custom ringtones, system notifications, per-trigger sounds, repeat reminders, quiet hours, three new sounds.
 - **v1.0.0** (2026-10-04) Initial release.
 
-## Development
+## 💻 Development
 
 ```powershell
 npm install             # once: the Host tests need the schemastery devDependency
@@ -170,6 +171,6 @@ dsh-plugin-notify-sounds/
 
 `package.json` is publishable as-is (`files` carries runtime artifacts only, `@deepseek-ai/schemastery` is a peerDependency plus a devDependency copy for the Host tests, pure ESM with no build step) — `npm publish` whenever you want it on npm.
 
-## License
+## 📄 License
 
 [MIT](LICENSE) © BillCx330

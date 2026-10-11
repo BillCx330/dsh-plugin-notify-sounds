@@ -597,10 +597,11 @@ const tree = renderTree(
 );
 flushEffects();
 assert.equal(tree.type, 'div');
-assert.equal(tree.children[0].length, 3, 'title, intro, rows');
+assert.equal(tree.children[0].length, 4, 'title, intro, the update notice, rows');
 assert.equal(tree.children[0][0].type, 'h2', 'the title is a heading like the shipped sections');
 assert.equal(tree.children[0][1].type, 'p', 'the intro is a paragraph');
-assert.equal(tree.children[0][2].children[0].length, 14, 'fourteen rows render: switch, volume, three pickers, sub-agent scope, custom, notification, flash, renotify, quiet, hidden, update toggle, update row');
+assert.equal(tree.children[0][2].type?.name, 'UpdateNotice', 'the update notice sits right under the intro, where the page lands');
+assert.equal(tree.children[0][3].children[0].length, 14, 'fourteen rows render: switch, volume, three pickers, sub-agent scope, custom, notification, flash, renotify, quiet, hidden, update toggle, update row');
 
 // --- Assertions: uncontrolled volume slider ------------------------------------
 let inputElement;
@@ -1065,7 +1066,7 @@ const getCustomRow = () => {
 		preview: injected.preview,
 		t: (key) => key,
 	}));
-	return currentTree.children[0][2].children[0][6];
+	return currentTree.children[0][3].children[0][6];
 };
 const realRemoveFormSet = form.set;
 form.set = (field, value) => field === 'customSoundName'
