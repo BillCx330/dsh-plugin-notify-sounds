@@ -19,6 +19,10 @@ dsh-plugin-notify-sounds
 
 ---
 
+## Consistent with DSH's own UI
+
+Every visual detail of the settings section comes from DSH's own design system: row geometry, dividers, type sizes and spacing use the official design tokens, the sound picker is the official `Menu` primitive, the icons come from the official family, and the layout follows the native text-left, control-right row shape. Installing it does not introduce a visually disjoint third-party block into your settings.
+
 ## What it does
 
 | What | What you get |
@@ -40,11 +44,9 @@ This plugin turns "it is waiting for you" and "it is done" into sound. With syst
 
 ## Sounds
 
-Nine Web Audio synthesized sounds — no audio files, no network requests:
+Bell · Chime · Ding · Drop · Pulse · Arc · Coin · Success · Knock — nine built-in sounds, all synthesized live with Web Audio: no audio files, no network requests.
 
-Bell · Chime · Ding · Drop · Pulse · Arc · Coin · Success · Knock
-
-Or upload your own ringtone (mp3/wav/ogg, ≤512KB, validated and volume-normalized automatically), or pick "None" for notifications only. Each trigger (approval / question / completion) can use a different sound, with preview right in the settings.
+Or upload your own ringtone (mp3/wav/ogg, ≤512KB, validated and volume-normalized automatically), or pick "None" for notifications only. Each trigger (approval / question / completion) gets its own sound, with preview right in the settings.
 
 ## Settings
 
@@ -72,7 +74,7 @@ The "install source" dropdown above the box picks the download mirror (mainland 
 
 ### Upgrading
 
-**There is no auto-update**: to upgrade, **uninstall** the old version from the same place first, then install the new one as above.
+DSH does not update plugins on its own, but this plugin **updates itself**: Settings → Sounds → Updates can check for a new version and install it in one click. Uninstalling and installing again also works.
 
 ### Other ways
 
@@ -121,6 +123,7 @@ For anyone hacking on the code (exact details live in the source comments):
 
 ## Changelog
 
+- **v1.6.1** (2026-10-11) The README is rebuilt as a release page: a new **Consistent with DSH's own UI** section on how the UI matches DSH's own settings, copy polished throughout, and the upgrade notes corrected — the plugin updates itself, so no uninstall is needed. This release doubles as the live drill for one-click update.
 - **v1.6.0** (2026-10-11) New: **check for updates and install them in one click**. The settings section can fetch the newest npm version and install it: the download is checked against the registry's published sha512, only whitelisted files are unpacked (symlinks and path traversal are refused), the old files are kept aside, and any failure restores them. Downloaded code is never executed — the new code loads when DSH restarts. Automatic checks run at most once a day and can be turned off, with the mainland-China mirror as fallback.
 - **v1.5.0** (2026-10-08) The "finished" title mark is unread news now — set by a finish that happens while you are away, cleared when you return — instead of reappearing on every switch-away. The retrigger cooldown is per session, so two conversations deciding within 2 seconds both ring. The Host half gained tests (Config schema, focus route, title matching) that cross-check the shared constants between the halves; the sessions provider is now an explicit load prerequisite, and quiet-hours catch-up is documented.
 
