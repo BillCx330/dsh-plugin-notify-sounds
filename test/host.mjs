@@ -244,9 +244,11 @@ assert.ok(host.compareVersions('2.0.0', '1.99.99') > 0, 'the major part decides 
 // Where a tarball may live: https only, and only the two registries consulted.
 assert.ok(host.isTrustedTarball('https://registry.npmjs.org/dsh-plugin-notify-sounds/-/dsh-plugin-notify-sounds-1.5.0.tgz'), 'the npm tarball host is trusted');
 assert.ok(host.isTrustedTarball('https://registry.npmmirror.com/dsh-plugin-notify-sounds/-/dsh-plugin-notify-sounds-1.5.0.tgz'), 'the mirror tarball host is trusted');
+assert.ok(host.isTrustedTarball('https://cdn.npmmirror.com/packages/dsh-plugin-notify-sounds/1.5.0/x.tgz'), 'the mirror CDN is trusted for tarballs');
 assert.ok(!host.isTrustedTarball('http://registry.npmjs.org/pkg.tgz'), 'plain http is refused');
 assert.ok(!host.isTrustedTarball('https://registry.npmjs.org.evil.example/pkg.tgz'), 'a lookalike host is refused');
 assert.ok(!host.isTrustedTarball('https://evil.example/pkg.tgz'), 'any other host is refused');
+assert.ok(!host.isTrustedTarball('https://cdn.npmmirror.com.evil.example/pkg.tgz'), 'a lookalike CDN host is refused');
 assert.ok(!host.isTrustedTarball('not a url'), 'a non-URL is refused');
 
 // The check itself, against a scripted registry and a travelling clock.
@@ -576,6 +578,60 @@ try {
 	const wrongApplyMethod = await callApply({ method: 'GET', url: '/notify-sounds/update/apply' });
 	assert.equal(wrongApplyMethod.statusCode, 405, 'a non-POST apply is refused with 405');
 	assert.equal(wrongApplyMethod.headers.allow, 'POST', 'the 405 advertises POST');
+
+	// Redirects: followed one hop at a time, and only to trusted hosts. The
+	// mainland mirror serves its tarballs from its CDN — the one legitimate
+	// hop. Measured: a downloader that refused every redirect could never
+	// finish whenever the mirror answered the check.
+	const redirectResponse = (location, status = 302) => ({
+		ok: false,
+		status,
+		headers: { get: (name) => (name.toLowerCase() === 'location' ? location : null) },
+		body: { getReader: () => ({ read: async () => ({ done: true }), cancel: async () => {} }) },
+	});
+	const mirrorArchive = buildTar(goodFiles);
+	const mirrorDigest = `sha512-${createHash('sha512').update(mirrorArchive).digest('base64')}`;
+	const mirrorAnswer = () => registryResponse({
+		version: '9.9.9',
+		dist: {
+			integrity: mirrorDigest,
+			tarball: 'https://registry.npmmirror.com/dsh-plugin-notify-sounds/-/dsh-plugin-notify-sounds-9.9.9.tgz',
+		},
+	});
+
+	const followedRoot = makeInstall('1.0.0');
+	globalThis.fetch = async (url) => {
+		const target = String(url);
+		applyRequests.push(target);
+		if (target.endsWith('/latest')) return mirrorAnswer();
+		if (target.startsWith('https://registry.npmmirror.com/')) {
+			return redirectResponse('https://cdn.npmmirror.com/packages/dsh-plugin-notify-sounds/9.9.9/dsh-plugin-notify-sounds-9.9.9.tgz');
+		}
+		return registryResponse(mirrorArchive);
+	};
+	applyRequests.length = 0;
+	const followed = await host.applyUpdate({ root: followedRoot });
+	assert.equal(followed.ok, true, 'a redirect to the mirror CDN is followed');
+	assert.equal(followed.to, '9.9.9', 'and the update lands');
+	assert.equal(applyRequests.length, 3, 'metadata, redirect, then the CDN download');
+	assert.ok(applyRequests[2].startsWith('https://cdn.npmmirror.com/'), 'the bytes come from the mirror CDN');
+	rmSync(followedRoot, { recursive: true, force: true });
+
+	const evilRoot = makeInstall('1.0.0');
+	globalThis.fetch = async (url) => (String(url).endsWith('/latest') ? mirrorAnswer() : redirectResponse('https://evil.example/pkg.tgz'));
+	const evilRedirect = await host.applyUpdate({ root: evilRoot });
+	assert.equal(evilRedirect.ok, false, 'a redirect to an untrusted host is refused');
+	assert.equal(evilRedirect.stage, 'download', 'and the failure names the stage');
+	assert.ok(String(evilRedirect.error).includes('evil.example'), 'and names the host it refused');
+	assert.ok(readFileSync(join(evilRoot, 'package.json'), 'utf8').includes('1.0.0'), 'nothing was written');
+	rmSync(evilRoot, { recursive: true, force: true });
+
+	const loopRoot = makeInstall('1.0.0');
+	globalThis.fetch = async (url) => (String(url).endsWith('/latest') ? mirrorAnswer() : redirectResponse(`${String(url)}/again`));
+	const looped = await host.applyUpdate({ root: loopRoot });
+	assert.equal(looped.ok, false, 'a redirect loop is refused');
+	assert.ok(String(looped.error).includes('redirects'), 'and says so');
+	rmSync(loopRoot, { recursive: true, force: true });
 } finally {
 	globalThis.fetch = realFetchForApply;
 	Date.now = realClockForApply;
