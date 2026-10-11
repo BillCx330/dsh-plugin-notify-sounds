@@ -20,9 +20,12 @@
  */
 
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { createHash } from 'node:crypto';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { gzipSync } from 'node:zlib';
 import * as host from '../lib/index.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -138,7 +141,7 @@ const makeCtx = () => ({
 
 host.apply(makeCtx());
 assert.deepEqual(configureCalls.map((call) => call.options), [{ auto: false }], 'the auto inventory page is suppressed');
-assert.equal(registeredRoutes.length, 2, 'two routes are registered: focus and update check');
+assert.equal(registeredRoutes.length, 3, 'three routes are registered: focus, update check, update apply');
 const route = registeredRoutes.find((entry) => entry.path === host.FOCUS_PATH);
 assert.ok(route, 'the focus route is registered');
 assert.equal(route.kind, 'exact', 'the route is an exact match');
@@ -262,7 +265,7 @@ globalThis.fetch = async (url, options) => {
 };
 /** A fetch response stub carrying exactly the pieces the check reads. */
 const registryResponse = (payload, status = 200) => {
-	const bytes = new TextEncoder().encode(JSON.stringify(payload));
+	const bytes = payload instanceof Uint8Array ? payload : new TextEncoder().encode(JSON.stringify(payload));
 	let sent = false;
 	return {
 		ok: status >= 200 && status < 300,
@@ -392,6 +395,190 @@ try {
 } finally {
 	globalThis.fetch = realFetch;
 	Date.now = realDateNow;
+}
+
+// --- Assertions: applying an update ----------------------------------------------
+// The apply path turns bytes from the network into files on disk. Each
+// assertion below is a gate in that chain: what an archive may contain, what a
+// digest must prove before anything is written, and that a failure leaves the
+// installation exactly as it was.
+
+/** Build a minimal ustar archive (optionally gzipped) from `path, contents` entries. */
+const buildTar = (entries, options = {}) => {
+	const encoder = new TextEncoder();
+	const blocks = [];
+	for (const [path, content, typeflag = '0'] of entries) {
+		const data = typeof content === 'string' ? encoder.encode(content) : content;
+		const header = new Uint8Array(512);
+		const put = (offset, length, text) => header.set(encoder.encode(text).subarray(0, length), offset);
+		put(0, 100, path);
+		put(124, 12, data.length.toString(8).padStart(11, '0'));
+		put(148, 8, '        ');
+		put(156, 1, typeflag);
+		let sum = 0;
+		for (const byte of header) sum += byte;
+		put(148, 7, sum.toString(8).padStart(6, '0'));
+		blocks.push(header);
+		const padded = new Uint8Array(Math.ceil(data.length / 512) * 512);
+		padded.set(data);
+		blocks.push(padded);
+	}
+	blocks.push(new Uint8Array(1024));
+	const total = blocks.reduce((size, block) => size + block.length, 0);
+	const archive = new Uint8Array(total);
+	let offset = 0;
+	for (const block of blocks) {
+		archive.set(block, offset);
+		offset += block.length;
+	}
+	return options.gzip === false ? archive : gzipSync(archive);
+};
+
+// What an archive may carry.
+const goodFiles = [['package/package.json', '{"version":"9.9.9"}'], ['package/lib/client.js', 'new client']];
+const unpacked = host.unpackTar(buildTar(goodFiles, { gzip: false }));
+assert.equal(unpacked.size, 2, 'the whitelisted files come through');
+assert.equal(new TextDecoder().decode(unpacked.get('lib/client.js')), 'new client', 'contents are carried verbatim');
+assert.ok(!unpacked.has('package/lib/client.js'), 'keys are package-relative, not archive paths');
+
+// Where an archive may not reach.
+for (const path of ['package/../evil.txt', 'package/../../etc/passwd', 'evil.txt', 'package/extra.txt', '/package/package.json', 'package\\..\\evil.txt']) {
+	assert.throws(() => host.unpackTar(buildTar([[path, 'x']], { gzip: false })), /refusing tar path/, `"${path}" is refused`);
+}
+assert.throws(() => host.unpackTar(buildTar([['package/package.json', 'x', '2']], { gzip: false })), /non-file tar entry/, 'a symlink entry is refused');
+assert.throws(() => host.unpackTar(new Uint8Array(1024)), /no usable files/, 'an empty archive is refused');
+assert.throws(() => host.unpackTar(buildTar([['package/package.json', 'x']], { gzip: false }).subarray(0, 512)), /claims more/, 'a truncated archive is refused');
+
+// What a digest must prove before a byte is written.
+const sampleBytes = new TextEncoder().encode('tarball bytes');
+const sampleDigest = `sha512-${createHash('sha512').update(sampleBytes).digest('base64')}`;
+host.verifyIntegrity(sampleBytes, sampleDigest);
+assert.throws(() => host.verifyIntegrity(new TextEncoder().encode('tampered bytes'), sampleDigest), /sha512/, 'tampered bytes fail the digest');
+assert.throws(() => host.verifyIntegrity(sampleBytes, 'sha512-'), /sha512/, 'an empty digest fails');
+assert.throws(() => host.verifyIntegrity(sampleBytes, 'md5-abc'), /sha512/, 'a non-sha512 digest fails');
+
+// End to end, against throwaway installations.
+const realFetchForApply = globalThis.fetch;
+const realClockForApply = Date.now;
+Date.now = () => 2_000_000_000_000;
+const applyRequests = [];
+/** Answer the registry, then serve the tarball it names. */
+const serve = (version, archive, integrityOverride) => {
+	const digest = integrityOverride ?? `sha512-${createHash('sha512').update(archive).digest('base64')}`;
+	globalThis.fetch = async (url) => {
+		const target = String(url);
+		applyRequests.push(target);
+		if (target.endsWith('/latest')) {
+			return registryResponse({
+				version,
+				dist: {
+					integrity: digest,
+					tarball: `https://registry.npmjs.org/dsh-plugin-notify-sounds/-/dsh-plugin-notify-sounds-${version}.tgz`,
+				},
+			});
+		}
+		return registryResponse(archive);
+	};
+};
+/** A throwaway installation whose manifest claims the given version. */
+const makeInstall = (version) => {
+	const root = mkdtempSync(join(tmpdir(), 'notify-sounds-update-'));
+	mkdirSync(join(root, 'lib'), { recursive: true });
+	writeFileSync(join(root, 'package.json'), JSON.stringify({ name: 'dsh-plugin-notify-sounds', version }));
+	writeFileSync(join(root, 'lib', 'client.js'), 'old client');
+	writeFileSync(join(root, 'lib', 'index.js'), 'old index');
+	writeFileSync(join(root, 'LICENSE'), 'old license');
+	return root;
+};
+
+try {
+	// A newer release is downloaded, verified, unpacked and swapped in.
+	const root = makeInstall('1.0.0');
+	serve('9.9.9', buildTar(goodFiles));
+	applyRequests.length = 0;
+	const updated = await host.applyUpdate({ root });
+	assert.equal(updated.ok, true, 'a newer release is applied');
+	assert.equal(updated.from, '1.0.0', 'the previous version is reported');
+	assert.equal(updated.to, '9.9.9', 'the installed version is reported');
+	assert.equal(updated.requiresRestart, true, 'the new code needs a restart');
+	assert.equal(JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version, '9.9.9', 'the manifest is swapped');
+	assert.equal(readFileSync(join(root, 'lib', 'client.js'), 'utf8'), 'new client', 'the code is swapped');
+	assert.equal(readFileSync(join(root, 'lib', 'index.js'), 'utf8'), 'old index', 'a file the archive did not carry is left alone');
+	assert.ok(readFileSync(join(root, '.update-backup', 'package.json'), 'utf8').includes('1.0.0'), 'the replaced files are kept aside');
+	assert.equal(applyRequests.length, 2, 'one registry answer and one download');
+	assert.ok(applyRequests[1].endsWith('.tgz'), 'the download comes from the tarball the registry named');
+	rmSync(root, { recursive: true, force: true });
+
+	// Nothing to do at the current version — and nothing is downloaded.
+	const current = makeInstall('9.9.9');
+	serve('9.9.9', buildTar(goodFiles));
+	applyRequests.length = 0;
+	const upToDate = await host.applyUpdate({ root: current });
+	assert.equal(upToDate.ok, true, 'an up-to-date install reports success');
+	assert.equal(upToDate.upToDate, true, 'and says there was nothing to do');
+	assert.equal(applyRequests.length, 1, 'the tarball is not downloaded');
+	rmSync(current, { recursive: true, force: true });
+
+	// A tarball that fails its digest is not written anywhere.
+	const tampered = makeInstall('1.0.0');
+	const archive = buildTar(goodFiles);
+	serve('9.9.9', archive, `sha512-${createHash('sha512').update('something else').digest('base64')}`);
+	const rejected = await host.applyUpdate({ root: tampered });
+	assert.equal(rejected.ok, false, 'a tarball that fails its digest is refused');
+	assert.equal(rejected.stage, 'verify', 'the failure names the stage');
+	assert.ok(readFileSync(join(tampered, 'package.json'), 'utf8').includes('1.0.0'), 'nothing was written');
+	rmSync(tampered, { recursive: true, force: true });
+
+	// A hostile archive is refused before anything is written.
+	const hostile = makeInstall('1.0.0');
+	serve('9.9.9', buildTar([['package/../evil.txt', 'gotcha']]));
+	const blocked = await host.applyUpdate({ root: hostile });
+	assert.equal(blocked.ok, false, 'an archive that climbs out of the package is refused');
+	assert.equal(blocked.stage, 'unpack', 'the failure names the stage');
+	assert.ok(readFileSync(join(hostile, 'package.json'), 'utf8').includes('1.0.0'), 'nothing was written');
+	rmSync(hostile, { recursive: true, force: true });
+
+	// A write that fails mid-way restores what was there.
+	const broken = makeInstall('1.0.0');
+	rmSync(join(broken, 'lib'), { recursive: true, force: true });
+	writeFileSync(join(broken, 'lib'), 'not a directory');
+	serve('9.9.9', buildTar(goodFiles));
+	const rolled = await host.applyUpdate({ root: broken });
+	assert.equal(rolled.ok, false, 'a replace failure is reported');
+	assert.equal(rolled.stage, 'replace', 'the failure names the stage');
+	assert.ok(readFileSync(join(broken, 'package.json'), 'utf8').includes('1.0.0'), 'the manifest is restored');
+	assert.equal(readFileSync(join(broken, 'LICENSE'), 'utf8'), 'old license', 'and the other files are untouched');
+	rmSync(broken, { recursive: true, force: true });
+
+	// The apply route is fenced and serves nothing but POST.
+	const applyRoute = registeredRoutes.find((entry) => entry.path === host.UPDATE_APPLY_PATH);
+	assert.ok(applyRoute, 'the update apply route is registered');
+	assert.equal(applyRoute.kind, 'exact', 'the apply route is an exact match');
+	assert.equal(client.UPDATE_APPLY_PATH, host.UPDATE_APPLY_PATH, 'the apply route path matches between the halves');
+	const callApply = async (req) => {
+		const res = {
+			statusCode: undefined,
+			headers: {},
+			ended: false,
+			setHeader(name, value) {
+				this.headers[name] = value;
+			},
+			end() {
+				this.ended = true;
+			},
+		};
+		await applyRoute.handler(req, res);
+		return res;
+	};
+	rejectionFor = () => 403;
+	assert.equal((await callApply({ method: 'POST', url: '/notify-sounds/update/apply' })).statusCode, 403, 'a fenced apply is refused with 403');
+	rejectionFor = () => undefined;
+	const wrongApplyMethod = await callApply({ method: 'GET', url: '/notify-sounds/update/apply' });
+	assert.equal(wrongApplyMethod.statusCode, 405, 'a non-POST apply is refused with 405');
+	assert.equal(wrongApplyMethod.headers.allow, 'POST', 'the 405 advertises POST');
+} finally {
+	globalThis.fetch = realFetchForApply;
+	Date.now = realClockForApply;
 }
 
 console.log('host test: all assertions passed');
