@@ -138,10 +138,10 @@ const makeCtx = () => ({
 
 host.apply(makeCtx());
 assert.deepEqual(configureCalls.map((call) => call.options), [{ auto: false }], 'the auto inventory page is suppressed');
-assert.equal(registeredRoutes.length, 1, 'one route is registered');
-const route = registeredRoutes[0];
+assert.equal(registeredRoutes.length, 2, 'two routes are registered: focus and update check');
+const route = registeredRoutes.find((entry) => entry.path === host.FOCUS_PATH);
+assert.ok(route, 'the focus route is registered');
 assert.equal(route.kind, 'exact', 'the route is an exact match');
-assert.equal(route.path, host.FOCUS_PATH, 'the route serves the shared focus path');
 assert.equal(typeof route.handler, 'function', 'the route carries a handler');
 
 /** Invoke the handler with a mock request and response. */
@@ -224,5 +224,174 @@ assert.ok(desktopRes.ended, 'the 204 response is ended');
 assert.ok(desktopLines.some((line) => line.includes('focus click (fromBrowser=false)')), 'the Desktop click is logged');
 assert.ok(desktopLines.some((line) => line.includes('raising via xdg-open')), 'a Desktop click attempts the raise');
 assert.equal(process.platform, realPlatform, 'the platform mock is restored');
+
+// --- Assertions: update check ----------------------------------------------------
+// The check is the one place the plugin asks the outside world for something it
+// may later act on, so these assertions pin that conversation down: which hosts
+// may be asked, what an answer must contain before it is believed, and that
+// this stage is a query and nothing more.
+assert.ok(Number.isNaN(host.compareVersions('1.0.0', 'not a version')), 'a non-version compares as unknown');
+assert.ok(host.compareVersions('1.4.9', '1.5.0') < 0, '1.4.9 sorts before 1.5.0');
+assert.ok(host.compareVersions('1.10.0', '1.9.9') > 0, '1.10.0 sorts after 1.9.9');
+assert.equal(host.compareVersions('1.5.0', '1.5.0'), 0, 'equal versions compare equal');
+assert.ok(host.compareVersions('1.5.0-rc.1', '1.5.0') < 0, 'a prerelease sorts before its release');
+assert.ok(host.compareVersions('1.5.0', '1.5.0-rc.1') > 0, 'a release sorts after its prerelease');
+assert.ok(host.compareVersions('2.0.0', '1.99.99') > 0, 'the major part decides first');
+
+// Where a tarball may live: https only, and only the two registries consulted.
+assert.ok(host.isTrustedTarball('https://registry.npmjs.org/dsh-plugin-notify-sounds/-/dsh-plugin-notify-sounds-1.5.0.tgz'), 'the npm tarball host is trusted');
+assert.ok(host.isTrustedTarball('https://registry.npmmirror.com/dsh-plugin-notify-sounds/-/dsh-plugin-notify-sounds-1.5.0.tgz'), 'the mirror tarball host is trusted');
+assert.ok(!host.isTrustedTarball('http://registry.npmjs.org/pkg.tgz'), 'plain http is refused');
+assert.ok(!host.isTrustedTarball('https://registry.npmjs.org.evil.example/pkg.tgz'), 'a lookalike host is refused');
+assert.ok(!host.isTrustedTarball('https://evil.example/pkg.tgz'), 'any other host is refused');
+assert.ok(!host.isTrustedTarball('not a url'), 'a non-URL is refused');
+
+// The check itself, against a scripted registry and a travelling clock.
+const fetchLog = [];
+const scripts = [];
+const realFetch = globalThis.fetch;
+const realDateNow = Date.now;
+let clock = 1_000_000_000_000;
+Date.now = () => clock;
+globalThis.fetch = async (url, options) => {
+	fetchLog.push({ url: String(url), options });
+	const script = scripts.shift();
+	if (script === undefined) throw new Error('no scripted response left');
+	if (script instanceof Error) throw script;
+	return script;
+};
+/** A fetch response stub carrying exactly the pieces the check reads. */
+const registryResponse = (payload, status = 200) => {
+	const bytes = new TextEncoder().encode(JSON.stringify(payload));
+	let sent = false;
+	return {
+		ok: status >= 200 && status < 300,
+		status,
+		headers: { get: (name) => (name === 'content-length' ? String(bytes.byteLength) : null) },
+		body: {
+			getReader: () => ({
+				read: async () => {
+					if (sent) return { done: true };
+					sent = true;
+					return { done: false, value: bytes };
+				},
+				cancel: async () => {},
+			}),
+		},
+	};
+};
+/** One plausible registry answer, with overrides for the hostile cases. */
+const registrySays = (version, overrides = {}) => registryResponse({
+	version,
+	dist: {
+		integrity: 'sha512-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==',
+		tarball: `https://registry.npmjs.org/dsh-plugin-notify-sounds/-/dsh-plugin-notify-sounds-${version}.tgz`,
+		...overrides,
+	},
+});
+const updateRoute = registeredRoutes.find((entry) => entry.path === host.UPDATE_CHECK_PATH);
+assert.ok(updateRoute, 'the update check route is registered');
+assert.equal(updateRoute.kind, 'exact', 'the update check route is an exact match');
+assert.equal(client.UPDATE_CHECK_PATH, host.UPDATE_CHECK_PATH, 'the check route path matches between the halves');
+const callUpdate = async (req) => {
+	const res = {
+		statusCode: undefined,
+		headers: {},
+		ended: false,
+		setHeader(name, value) {
+			this.headers[name] = value;
+		},
+		end() {
+			this.ended = true;
+		},
+	};
+	await updateRoute.handler(req, res);
+	return res;
+};
+
+try {
+	// A good answer from the first registry.
+	scripts.push(registrySays('9.9.9'));
+	fetchLog.length = 0;
+	const fresh = await host.checkForUpdate({ force: true });
+	assert.equal(fresh.ok, true, 'a good answer is accepted');
+	assert.equal(fresh.latest, '9.9.9', 'the reported version is surfaced');
+	assert.equal(fresh.updateAvailable, true, 'a newer version marks updateAvailable');
+	assert.equal(fetchLog.length, 1, 'one request was made');
+	assert.equal(fetchLog[0].url, 'https://registry.npmjs.org/dsh-plugin-notify-sounds/latest', 'the request goes to the pinned npm endpoint');
+	assert.equal(fetchLog[0].options.redirect, 'error', 'redirects are refused rather than followed');
+
+	// A fresh result is answered from memory.
+	fetchLog.length = 0;
+	assert.equal(await host.checkForUpdate(), fresh, 'the cached result is returned as-is');
+	assert.equal(fetchLog.length, 0, 'a cached answer costs no request');
+
+	// Spacing: even a forced check may not hammer inside the spacing window.
+	fetchLog.length = 0;
+	assert.equal(await host.checkForUpdate({ force: true }), fresh, 'a forced check inside the spacing window answers from cache');
+	assert.equal(fetchLog.length, 0, 'and makes no request');
+
+	// Past the freshness window, a forced check asks again.
+	clock += 25 * 60 * 60 * 1000;
+	scripts.push(registrySays('9.9.9'));
+	fetchLog.length = 0;
+	await host.checkForUpdate({ force: true });
+	assert.equal(fetchLog.length, 1, 'a forced check after the window asks again');
+
+	// A failing registry falls through to the mirror.
+	clock += 25 * 60 * 60 * 1000;
+	scripts.push(new Error('network down'));
+	scripts.push(registrySays('9.9.9'));
+	fetchLog.length = 0;
+	const mirrored = await host.checkForUpdate({ force: true });
+	assert.equal(mirrored.ok, true, 'the mirror answers when the first registry fails');
+	assert.equal(fetchLog.length, 2, 'both registries were tried');
+	assert.equal(fetchLog[1].url, 'https://registry.npmmirror.com/dsh-plugin-notify-sounds/latest', 'the second request goes to the pinned mirror');
+
+	// An answer without a usable integrity is not believed.
+	clock += 25 * 60 * 60 * 1000;
+	scripts.push(registrySays('9.9.9', { integrity: 'md5-1234' }));
+	scripts.push(registrySays('9.9.9', { integrity: 'md5-1234' }));
+	assert.equal((await host.checkForUpdate({ force: true })).ok, false, 'an answer without a sha512 integrity is refused');
+
+	// Neither is one whose tarball points outside the registries.
+	clock += 25 * 60 * 60 * 1000;
+	scripts.push(registrySays('9.9.9', { tarball: 'https://evil.example/pkg.tgz' }));
+	scripts.push(registrySays('9.9.9', { tarball: 'https://evil.example/pkg.tgz' }));
+	assert.equal((await host.checkForUpdate({ force: true })).ok, false, 'an answer pointing at another host is refused');
+
+	// Neither is a malformed version.
+	clock += 25 * 60 * 60 * 1000;
+	scripts.push(registrySays('not-a-version'));
+	scripts.push(registrySays('not-a-version'));
+	assert.equal((await host.checkForUpdate({ force: true })).ok, false, 'an answer with a malformed version is refused');
+
+	// Offline: every failure becomes a result, never a throw.
+	clock += 25 * 60 * 60 * 1000;
+	scripts.push(new Error('offline'));
+	scripts.push(new Error('offline'));
+	const offline = await host.checkForUpdate({ force: true });
+	assert.equal(offline.ok, false, 'a completely offline check reports failure');
+	assert.equal(typeof offline.error, 'string', 'and explains itself');
+
+	// The route: fence, method gate, and one JSON answer.
+	rejectionFor = () => 401;
+	assert.equal((await callUpdate({ method: 'GET', url: '/notify-sounds/update/check' })).statusCode, 401, 'a fenced check is refused with 401');
+	rejectionFor = () => undefined;
+	const wrongMethod = await callUpdate({ method: 'POST', url: '/notify-sounds/update/check' });
+	assert.equal(wrongMethod.statusCode, 405, 'a non-GET is refused with 405');
+	assert.equal(wrongMethod.headers.allow, 'GET', 'the 405 advertises GET');
+	clock += 25 * 60 * 60 * 1000;
+	scripts.push(registrySays('9.9.9'));
+	fetchLog.length = 0;
+	const forced = await callUpdate({ method: 'GET', url: '/notify-sounds/update/check?force=1' });
+	assert.equal(forced.statusCode, 200, 'a check is answered 200');
+	assert.equal(forced.headers['content-type'], 'application/json', 'the answer is JSON');
+	assert.equal(fetchLog.length, 1, 'a forced check reaches the registry');
+	assert.ok(fetchLog[0].url.startsWith('https://registry.npmjs.org/'), 'and only ever talks to a pinned registry');
+} finally {
+	globalThis.fetch = realFetch;
+	Date.now = realDateNow;
+}
 
 console.log('host test: all assertions passed');

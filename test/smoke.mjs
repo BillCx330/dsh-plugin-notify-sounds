@@ -398,6 +398,7 @@ const baseValue = () => ({
 	questionSound: 'chime',
 	completionSound: 'ding',
 	subagentAlerts: false,
+	updateAutoCheck: true,
 	onlyWhenHidden: false,
 	customSound: '',
 	customSoundName: '',
@@ -599,7 +600,7 @@ assert.equal(tree.type, 'div');
 assert.equal(tree.children[0].length, 3, 'title, intro, rows');
 assert.equal(tree.children[0][0].type, 'h2', 'the title is a heading like the shipped sections');
 assert.equal(tree.children[0][1].type, 'p', 'the intro is a paragraph');
-assert.equal(tree.children[0][2].children[0].length, 12, 'twelve rows render: switch, volume, three pickers, sub-agent scope, custom, notification, flash, renotify, quiet, hidden');
+assert.equal(tree.children[0][2].children[0].length, 14, 'fourteen rows render: switch, volume, three pickers, sub-agent scope, custom, notification, flash, renotify, quiet, hidden, update toggle, update row');
 
 // --- Assertions: uncontrolled volume slider ------------------------------------
 let inputElement;
@@ -1169,5 +1170,25 @@ scheduled.length = 0;
 publish([['sub1', { running: true, pendingInteraction: undefined }]]);
 publish([['sub1', { running: false, pendingInteraction: undefined, completionUnread: true }]]);
 assert.ok(scheduled.length > 0, 'with sub-agent alerts on, a sub-agent finishing alerts normally');
+
+// --- Assertions: update check row ------------------------------------------------
+// The row asks the Host's fixed check route — a read-only query, nothing
+// downloaded — and the button asks again with force. The URL is asserted
+// because it is the one place this page reaches for the outside world.
+const updateButtons = [];
+walkElements(tree, (element) => {
+	if (element.type === 'Button' && Array.isArray(element.children) && element.children[0] === 'update.check') updateButtons.push(element);
+});
+assert.equal(updateButtons.length, 1, 'the update row renders one check button');
+let idleStatus = false;
+walkElements(tree, (element) => {
+	if (element.type === 'div' && Array.isArray(element.children) && element.children[0] === 'update.idle') idleStatus = true;
+});
+assert.ok(idleStatus, 'the update row starts at "not checked yet"');
+fetchCalls.length = 0;
+updateButtons[0].props.onClick();
+assert.equal(fetchCalls.length, 1, 'checking asks the Host exactly once');
+assert.equal(fetchCalls[0].input, '/notify-sounds/update/check?force=1', 'the check goes to the fixed route with force');
+assert.equal(fetchCalls[0].init.method, 'GET', 'the check is a GET');
 
 console.log('smoke test: all assertions passed');
