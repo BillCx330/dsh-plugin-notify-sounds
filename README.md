@@ -30,6 +30,7 @@ dsh-plugin-notify-sounds
 | **Only what you care about** | Sub-agents (background tasks) are completely silent by default — only your own conversation is announced |
 | **Quiet when it should be** | Quiet hours (e.g. 22:00–08:00, wrapping past midnight), notify-only-when-hidden, and a master switch |
 | **Your sound, your way** | Nine built-in sounds, custom ringtone upload, volume — each feature with its own toggle |
+| **Updates itself** | Check npm for a new version and install it in one click: verified against the published digest before anything is replaced, restored on failure; restart DSH to load it |
 
 ## Why
 
@@ -49,7 +50,7 @@ Or upload your own ringtone (mp3/wav/ogg, ≤512KB, validated and volume-normali
 
 Settings → **Sounds** (between General and Models). Every feature has its own toggle, styled exactly like DSH's own preference pages:
 
-master switch and volume · per-trigger sounds with preview · sub-agent alerts · system notifications · window title alert · repeat interval · quiet hours · hidden-only mode · custom ringtone upload
+master switch and volume · per-trigger sounds with preview · sub-agent alerts · system notifications · window title alert · repeat interval · quiet hours · hidden-only mode · custom ringtone upload · update checks and one-click update
 
 Everything applies immediately — no restart needed.
 
@@ -96,6 +97,7 @@ The command line writes `dsh.profile.bundles` and installs the dependency for yo
 ## Known limitations
 
 - **Hand-edited config**: preferences live in the profile's `cordis.patch.yml`; values must match the schema (volume 0–100, a preset id, `HH:MM` times) or the plugin declines to load — just fix the value. The settings UI only ever writes valid values.
+- **One-click update only swaps files**: it replaces the seven files this package ships and **never touches the profile's configuration**. Downloaded code is never executed — the new code loads on a **DSH restart**. Let the row report a result before closing the window (an interrupted update restores itself, but there is no reason to gamble); if a future release adds a dependency, that needs installing separately (this one has none).
 - **Multiple windows** fire independently: the same event may chime once per window; turn on notify-only-when-hidden to avoid it.
 - **Quiet hours hold reminders, they do not drop them**: a repeat reminder that becomes due during the quiet range fires right after it ends, and several pending decisions can fire at once then.
 - **Click-to-return** is fully implemented and tested on Windows; macOS / Linux fall back to the system deep link and are unverified.
@@ -119,6 +121,7 @@ For anyone hacking on the code (exact details live in the source comments):
 
 ## Changelog
 
+- **v1.6.0** (2026-10-11) New: **check for updates and install them in one click**. The settings section can fetch the newest npm version and install it: the download is checked against the registry's published sha512, only whitelisted files are unpacked (symlinks and path traversal are refused), the old files are kept aside, and any failure restores them. Downloaded code is never executed — the new code loads when DSH restarts. Automatic checks run at most once a day and can be turned off, with the mainland-China mirror as fallback.
 - **v1.5.0** (2026-10-08) The "finished" title mark is unread news now — set by a finish that happens while you are away, cleared when you return — instead of reappearing on every switch-away. The retrigger cooldown is per session, so two conversations deciding within 2 seconds both ring. The Host half gained tests (Config schema, focus route, title matching) that cross-check the shared constants between the halves; the sessions provider is now an explicit load prerequisite, and quiet-hours catch-up is documented.
 
 - **v1.4.4** (2026-10-08) Quiet hours now suppress the taskbar title alert too, and the title refreshes as the quiet-hours window begins or ends. Custom-sound upload/removal writes are ordered and roll back on refusal; synchronous config-write errors are handled as save failures.
