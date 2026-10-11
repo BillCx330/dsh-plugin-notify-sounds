@@ -509,6 +509,17 @@ try {
 	assert.ok(readFileSync(join(root, '.update-backup', 'package.json'), 'utf8').includes('1.0.0'), 'the replaced files are kept aside');
 	assert.equal(applyRequests.length, 2, 'one registry answer and one download');
 	assert.ok(applyRequests[1].endsWith('.tgz'), 'the download comes from the tarball the registry named');
+
+	// The cached "update available" answer is a lie now. A check after the
+	// install must re-read the manifest it just wrote — and it repeats the
+	// install it just made, so the row can keep saying so even after the page
+	// reloads (an update swaps the client half's own file).
+	applyRequests.length = 0;
+	const afterApply = await host.checkForUpdate({ root });
+	assert.equal(afterApply.applied?.from, '1.0.0', 'the check repeats what the install replaced');
+	assert.equal(afterApply.applied?.to, '9.9.9', 'and what it installed');
+	assert.equal(afterApply.updateAvailable, false, 'and the fresh answer knows there is nothing left to do');
+	assert.equal(applyRequests.length, 1, 'a check after the install re-queries instead of trusting the stale cache');
 	rmSync(root, { recursive: true, force: true });
 
 	// Nothing to do at the current version — and nothing is downloaded.
