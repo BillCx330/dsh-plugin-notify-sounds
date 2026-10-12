@@ -252,6 +252,9 @@ globalThis.document = {
 		if (selector === 'title') return titleElement;
 		return null;
 	},
+	querySelectorAll() {
+		return [];
+	},
 	createElement(tag) {
 		return fakeNode(tag.toUpperCase());
 	},
@@ -1230,16 +1233,12 @@ assert.equal(fetchCalls[0].init.method, 'GET', 'the check is a GET');
 	assert.ok(resumeCalls > 0, 'the unlock effect calls resume() on pointerdown');
 	engine.resume = origResume;
 
-	// Cleanup: dispose the unlock effect and assert its listeners are removed.
-	// The effect is registered via ctx.effect; the cleanup runs when the
-	// plugin's fiber tears down.  Simulate by dispatching the cleanup directly.
-	// We stored the unlock listeners in documentListeners — count them now,
-	// then run the cleanup and verify they are gone.
-	const unlockListeners = (documentListeners['pointerdown'] ?? []).length;
-	assert.ok(unlockListeners > 0, 'the unlock listener is registered');
-	// The cleanup for the audio unlock effect runs on fiber disposal.
-	// Since the test does not tear down the fiber mid-run, we verify the
-	// listener count is stable (no leak) rather than asserting teardown.
+	// ③ Cleanup: dispose the plugin's effects (fiber teardown), then verify
+	//    the unlock listener is gone — pointerdown should no longer call resume.
+	const beforeDispose = resumeCalls;
+	for (const dispose of effects) dispose();
+	for (const fn of documentListeners['pointerdown'] ?? []) fn();
+	assert.equal(resumeCalls, beforeDispose, 'the unlock listener is removed after the effect is disposed');
 }
 
 console.log('smoke test: all assertions passed');
