@@ -5,13 +5,13 @@
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![DeepSeek Harness plugin](https://img.shields.io/badge/dsh-plugin-8b5cf6.svg)](https://github.com/deepseek-ai/deepseek-harness)
 
-[English](README.en.md) | 中文
+English | [中文](README.zh.md)
 
-**智能体在等你、或干完活时，轻轻响一声。**
+**A soft chime when the agent is waiting for you — or when it is done.**
 
-人不在窗口前也不怕：后台弹系统通知（**点击即回到窗口**），任务栏标题亮出「待处理 / 已完成」；你回来看过一眼之后，它就闭嘴——不会像闹钟一样反复催你。
+Walk away from the window without missing anything: an OS notification in the background (**click it to jump back**), and a "Waiting for you" / "Finished" mark on the taskbar title. Once you have seen it, the plugin goes quiet — it will not nag you like an alarm clock.
 
-**安装**：DSH → 设置 → 插件 → 添加插件，粘贴下面这行，点「安装」：
+**Install**: DSH → Settings → Plugins → Add plugin, paste the line below and press **Install**:
 
 ```
 dsh-plugin-notify-sounds
@@ -19,160 +19,161 @@ dsh-plugin-notify-sounds
 
 ---
 
-## 🎨 与 DSH 界面风格统一
+## 🎨 Consistent with DSH's design language
 
-设置面板中的每一处视觉细节都取自 DSH 自身的设计体系：行几何、分隔线、字号与间距沿用官方设计令牌，音效选择器使用官方 `Menu` 组件，图标来自官方图标族，排布沿用「文字左 / 控件右」的原生行式。安装后不会在设置中出现风格割裂的第三方区块。
+Every visual detail of the settings section comes from DSH's own design system: row geometry, dividers, type sizes and spacing use the official design tokens, the sound picker is the official `Menu` primitive, the icons come from the official family, and the layout follows the native text-left, control-right row shape. Installing it does not introduce a visually disjoint third-party block into your settings.
 
-## ✨ 它能做什么
+## ✨ What it can do
 
-| 提醒什么 | 效果 |
+| What | What you get |
 |---|---|
-| **需要你决策** | 智能体发起审批、计划确认、提问时提示音；审批与提问可分别设音效 |
-| **任务完成** | 会话由运行转为空闲时提示音 |
-| **人不在窗口前也能感知** | 后台弹系统通知（正文就是审批理由或提问原文，点击回到窗口）；任务栏标题显示「待处理 / 已完成」 |
-| **没看到会再提醒** | 未处理决策按 1/5/15/30 分钟重复提醒 |
-| **只提醒你关心的** | 子智能体（后台任务）默认完全静默，只提醒主对话，可开关 |
-| **该安静时安静** | 静音时段（如 22:00–08:00，可跨午夜）、仅页面不可见时提示、总开关一键全静音 |
-| **声音随你** | 九种内置音效、自定义铃声上传、音量调节，每项独立开关 |
-| **检测更新** | 设置里检查 npm 新版本并一键更新：下载后校验完整性才替换，失败自动还原；更新后重启 DSH 生效 |
+| **Your decision is needed** | A chime when the agent raises an approval, a plan review, or a question — separate sounds for approvals and questions |
+| **Task finished** | A chime when a session goes from running to idle |
+| **Aware even when you are away** | An OS notification in the background (body is the approval reason or the question itself; **click to return to the window**) plus a taskbar title mark |
+| **Missed it? It reminds again** | Unanswered decisions re-ping every 1/5/15/30 minutes — and **stop for good once you have seen them**, even if you switch away again |
+| **Only what you care about** | Sub-agents (background tasks) are completely silent by default — only your own conversation is announced |
+| **Quiet when it should be** | Quiet hours (e.g. 22:00–08:00, wrapping past midnight), notify-only-when-hidden, and a master switch |
+| **Your sound, your way** | Nine built-in sounds, custom ringtone upload, volume — each feature with its own toggle |
+| **Update checks** | Check npm for a new version and install it in one click: verified against the published digest before anything is replaced, restored on failure; restart DSH to load it |
 
-## 💡 为什么需要它
+## 💡 Why
 
-DSH 的状态提示只有视觉——状态点、侧栏标记。你一切到别的窗口，就既看不到也听不到，智能体却可能正卡在那里等你一句话。
+DSH tells you things visually — status dots, sidebar marks. The moment you switch to another window, you can neither see nor hear anything, while the agent may be stuck waiting for one sentence from you.
 
-这个插件把「在等你」和「干完了」变成声音。配合系统通知与标题标记，人走开也知道发生了什么；而你回来处理过之后它就安静——重复提醒也只针对你**从没看过**的决策。
+This plugin turns "it is waiting for you" and "it is done" into sound. With system notifications and the title mark you know what happened even while away; and once you come back and see it, it goes quiet — the repeat reminder only chases decisions you have **never** seen.
 
-## 🔔 声音
+## 🔔 Sounds
 
-双音铃 · 风铃 · 单音叮 · 水滴 · 脉冲 · 上行琶音 · 金币 · 达成 · 敲门 —— 九种内置音效全部由 Web Audio 现场合成，不含任何音频文件、不发一次网络请求。
+Bell · Chime · Ding · Drop · Pulse · Arc · Coin · Success · Knock — nine built-in sounds, all synthesized live with Web Audio: no audio files, no network requests.
 
-也可以换上你自己的铃声（mp3/wav/ogg，≤512KB，自动校验并做音量归一化），或者干脆选「无声」只留通知。三种触发（审批 / 提问 / 完成）各选各的音效，设置里随时试听。
+Or upload your own ringtone (mp3/wav/ogg, ≤512KB, validated and volume-normalized automatically), or pick "None" for notifications only. Each trigger (approval / question / completion) gets its own sound, with preview right in the settings.
 
-## ⚙️ 设置
+## ⚙️ Settings
 
-设置 → **提示音**（位于「通用设置」与「模型」之间），每项功能都有独立开关，界面与 DSH 原生设置完全一致：
+Settings → **Sounds** (between General and Models). Every feature has its own toggle, styled exactly like DSH's own preference pages:
 
-总开关与音量 · 三种触发各自的音效（含试听）· 子智能体提醒 · 系统通知 · 窗口标题提醒 · 重复提醒间隔 · 静音时段 · 仅后台提示 · 自定义铃声上传 · 自动检查更新与一键更新
+master switch and volume · per-trigger sounds with preview · sub-agent alerts · system notifications · window title alert · repeat interval · quiet hours · hidden-only mode · custom ringtone upload · update checks and one-click update
 
-改动即时生效，无需重启。
+Everything applies immediately — no restart needed.
 
-## 📦 安装
+## 📦 Install
 
-### 🖱️ 最简单：在 DSH 里点两下（推荐）
+### 🖱️ Simplest: two clicks inside DSH (recommended)
 
-1. 打开 DSH → **设置 → 插件**，点**添加插件**；
-2. 在输入框粘贴包名（本插件已发布在 [npm](https://www.npmjs.com/package/dsh-plugin-notify-sounds)）：
+1. In DSH open **Settings → Plugins** and press **Add plugin**;
+2. Paste the package name into the box (this plugin is published on [npm](https://www.npmjs.com/package/dsh-plugin-notify-sounds)):
 
    ```
    dsh-plugin-notify-sounds
    ```
 
-   （填 GitHub 仓库地址 `https://github.com/BillCx330/dsh-plugin-notify-sounds` 或本地目录路径也可以）
-3. 点**安装**，装完**重启 DSH** 一次。
+   (the GitHub repository address `https://github.com/BillCx330/dsh-plugin-notify-sounds` or a local directory path work too)
+3. Press **Install**, then **restart DSH** once.
 
-输入框上方的「安装源」是下载源，默认中国大陆镜像源，国内一般不用改。DSH 会提示「插件以你的权限运行」——本插件只读会话状态、在本地发声；唯一的请求是点击系统通知时发给**本机 DSH** 的唤窗请求，不向外部发送任何数据。
+The "install source" dropdown above the box picks the download mirror (mainland China mirror by default; leave it alone unless downloads are slow). DSH warns that a plugin runs with your permissions — this one only reads session state and plays sounds locally; its single request goes to **your own DSH** to raise the window when you click a notification, and nothing is sent anywhere else.
 
-### ⬆️ 升级
+### ⬆️ Upgrading
 
-DSH 不会自动更新插件，但本插件**自带更新功能**：设置 → 提示音 →「更新」里可以检查新版并一键安装。想走手动路径也可以：在同一处先**卸载**旧版，再按上面的步骤装新版。
+DSH does not update plugins on its own, but this plugin **updates itself**: Settings → Sounds → Updates can check for a new version and install it in one click. Uninstalling and installing again also works.
 
-### 🛠️ 其他安装方式
+### 🛠️ Other ways
 
-**命令行** —— 对你实际使用的 profile 一条命令：
-
-```sh
-dsh plugin --profile <你的 profile> add github:BillCx330/dsh-plugin-notify-sounds
-```
-
-**Release 压缩包** —— 从 [Releases](https://github.com/BillCx330/dsh-plugin-notify-sounds/releases) 下载 `.tgz`，交给 `dsh plugin add`。
-
-**本地目录** —— 开发或试用未发布的改动：
+**Command line** — one command against the profile you actually use:
 
 ```sh
-dsh plugin --profile <你的 profile> add ./dsh-plugin-notify-sounds
+dsh plugin --profile <your profile> add github:BillCx330/dsh-plugin-notify-sounds
 ```
 
-**手工编辑** —— 在 profile 的 `package.json` 的 `dependencies` 加 `"dsh-plugin-notify-sounds": "github:BillCx330/dsh-plugin-notify-sounds"`，在 `dsh.profile.bundles` 追加 `"dsh-plugin-notify-sounds"`，然后在 profile 目录跑一次包安装（如 `pnpm install`）把依赖装进 `node_modules`。
+**Release archive** — download the `.tgz` from [Releases](https://github.com/BillCx330/dsh-plugin-notify-sounds/releases) and hand it to `dsh plugin add`.
 
-命令行方式会自动写入 `dsh.profile.bundles` 并装好依赖，无需手工编辑。包内直接带预构建产物、不声明任何生命周期脚本，安装过程不执行构建脚本。安装后**重启 DSH**（日常升级仅客户端改动时，可热更生效）。
+**Local directory** — for development or trying unreleased changes:
 
-## ⚠️ 已知边界
+```sh
+dsh plugin --profile <your profile> add ./dsh-plugin-notify-sounds
+```
 
-- **手改配置**：偏好写在 profile 的 `cordis.patch.yml`，值必须符合 schema（音量 0–100、音效为预设之一、时间 `HH:MM`）；写错会让插件不加载，改回即可。设置界面只会写入合法值。
-- **一键更新只换文件**：只替换本包内的七个文件，**不碰 profile 配置**；下载内容从不执行，新代码要等**重启 DSH** 才生效。更新过程请等状态行给出结果再关窗口（中断会自动还原）；若未来的新版引入了新依赖，需另行安装（当前零依赖）。
-- **多窗口**：各窗口独立触发，同一事件可能各响一次；打开「仅在页面不可见时提示」即可避免。
-- **点击通知回到窗口**：Windows 完整实现并实测；macOS / Linux 走系统深链，未验证。
-- **唤窗按窗口标题定位主窗口**：刻意不读取其他进程信息（那会触发杀软主动防御）。若将来 DSH 改变标题格式，唤窗会静默失效——提示音与通知本身不受影响。
-- **导航小图标**：依赖设置面板的 DOM 结构，若DSH 改版后自动回落为官方齿轮，仅影响外观。
-- **通知权限**：桌面端放行；受限环境（某些浏览器策略）下被拒时，行内会引导手动允许，其余功能不受影响。
-- **macOS 的系统通知**：桌面外壳对权限请求一律放行，所以设置里恒显示「已授权」；**实际是否弹横幅由 macOS 决定**（系统设置 → 通知 → DeepSeek Harness），未签名的开发版可能静默失败——「显示已授权却没通知」多半不是插件的问题。
+**By hand** — add `"dsh-plugin-notify-sounds": "github:BillCx330/dsh-plugin-notify-sounds"` to `dependencies` in the profile's `package.json`, append `"dsh-plugin-notify-sounds"` to `dsh.profile.bundles`, then run a package install (e.g. `pnpm install`) in the profile directory so the dependency lands in `node_modules`.
 
-## 🧩 设计与实现
+The command line writes `dsh.profile.bundles` and installs the dependency for you. The package ships prebuilt artifacts and declares no lifecycle scripts, so nothing is built at install time. **Restart DSH** after installing (everyday upgrades that touch only the client half hot-reload).
 
-给想改代码的人看的要点（实现细节以源码注释为准）：
+## ⚠️ Known limitations
 
-- **触发不碰事件瀑布**：审批/提问的请求是 waterfall 事件，UI 应答后晚注册的监听器收不到。本插件改读 `uiSession.sessionStatus`（DSH 自己聚合的 pending/running 事实，与侧栏状态点同源），纯观察、零侵入。
-- **重复提醒的节拍**：15 秒粒度检查未处理决策；**看过即除名**（决策出现时你正在窗口、或之后回到窗口，都算看过），切走不重新武装；新问题替换旧问题会重置计时。免打扰期间的提醒直接作废，不会顺延到时段结束补发。
-- **通知点击回到窗口**：渲染进程唤不起 OS 窗口，点击时 POST 到宿主半边的 `/notify-sounds/focus`（带 connection 围栏），由宿主唤起。Windows 用 DSH 自带的 `koffi` 直接调 `user32.dll`（不引新依赖、只操作窗口、不启动 PowerShell——那会触发杀软主动防御并归因到 DSH）；桌面端/浏览器端按 `Origin` 头自动区分，浏览器端不误唤桌面窗口。
-- **通知折叠**：不把 `tag` 交给平台（平台替换旧通知时会吞掉指向它的点击），由插件自己关旧发新，并持有每一代通知对象的引用，避免点击回调被回收成死按钮。
-- **标题标记**：只做前缀加/删，与 DSH 自身的标题管理互不干扰；前缀按实际写入的文字记录，语言切换不叠加、不残留。「已完成」是未读消息——离开期间发生的完成才标记，回到页面即清除——不是常驻的「空闲」状态，看过的完成不会在每次切走时重新出现。
-- **免打扰即遗忘**：静音时段内发生的决策与完成不记账——不响、不通知、不打标题标记，时段结束也不补发；本该在时段内发出的重复提醒直接作废。
-- **冷却与健壮性**：同一会话的同类触发 2 秒内不重复响（另一个会话的决策照常响）；音量经 `Number.isFinite` 防护（手改 YAML 的非法值回落默认）；写入被拒时控件回弹到已接受值并显示错误行；开关写入中禁用，防双击竞写。
-- **音量滑杆**：非受控输入，拖动只写 CSS 自定义属性，松手才提交一次，不卡顿、不回弹。
-- **主题与排版**：全部使用 `--dsw-alias-*` 令牌，分区与行几何复刻官方设置页；音效选择用官方 `Menu` 下拉，不会撑出横向滚动。
+- **Hand-edited config**: preferences live in the profile's `cordis.patch.yml`; values must match the schema (volume 0–100, a preset id, `HH:MM` times) or the plugin declines to load — just fix the value. The settings UI only ever writes valid values.
+- **One-click update only swaps files**: it replaces the seven files this package ships and **never touches the profile's configuration**. Downloaded code is never executed — the new code loads on a **DSH restart**. Let the row report a result before closing the window (an interrupted update restores itself, but there is no reason to gamble); if a future release adds a dependency, that needs installing separately (this one has none).
+- **Multiple windows** fire independently: the same event may chime once per window; turn on notify-only-when-hidden to avoid it.
+- **Click-to-return** is fully implemented and tested on Windows; macOS / Linux fall back to the system deep link and are unverified.
+- **The window is found by its title** — deliberately without inspecting other processes (that trips security software). If DSH ever changes its title format, click-to-return silently stops working; sounds and notifications are unaffected.
+- **The nav glyph** depends on the settings panel's DOM structure and silently falls back to the official gear after a DSH redesign — cosmetic only.
+- **Notification permission** is granted on the Desktop; under restrictive policies the row shows how to allow it manually, everything else keeps working.
+- **macOS system notifications**: the desktop shell grants every permission request, so settings always say "granted" — whether a banner actually appears is up to macOS (System Settings → Notifications → DeepSeek Harness), and unsigned development builds may fail silently. "It says granted but nothing shows" is usually not this plugin.
+- **Upgrading from v1.0.0**: since v1.1.0 approvals and questions are separate tracks, so questions default to "Chime" instead of "Bell" — change it back in settings if you prefer.
 
-## 📜 更新记录
+## 🧩 Design notes
 
-- **v1.6.8**（2026-10-12）修复复核细节 + 优化：`autoCheck` 首帧时序补上（`undefined` 不再被当成允许联网）；删孤立 JSDoc；teardown 断言改为真正验证监听器移除；`normalizedGain` 抽样（每 8 帧，260 万→33 万次）；`master` gain 播完自动断连（不再泄漏音频节点）；`swapNavIcon` try/catch + 保留原节点、dispose 时还原（React 重排不再炸）；冷却表 LRU 淘汰（不再全清）；`sessionRows` 同步块级快照缓存。
-- **v1.6.7**（2026-10-12）修复复核发现的 3 处细节：macOS 浏览器标签页不再被误标「暂不支持标题提醒」（`isDesktopShell` 才是判据）；「自动检查=关」的首帧时序缺口补上（`undefined` 不再被当成允许）；三处注释与实现不符已更正。补 BUG-1 回归测试（挂起 AudioContext 三断言）。
-- **v1.6.6**（2026-10-12）按审计报告修复 9 处：浏览器自动播放策略下不再丢失提示音、也不再「攒到某次点击时一起补放」（首次手势解锁 + 只在真正可播时排程）；macOS 唤窗改为按 bundle id 激活、深链兜底，失败会写进日志；更新回滚补全——新增文件一并撤回、不留临时文件、成功后清理备份；检查与更新加单飞，两个页面同时点不再互踩或重复请求；「自动检查更新=关」真正生效；移动端通知构造失败会如实显示不支持；导航图标回到官方 17×17 坐标系。跨平台标注：macOS 的「窗口标题提醒」标为暂不支持，浏览器下的重复提醒标注后台可能节流。
-- **v1.6.5**（2026-10-11）免打扰改为**真的忘记**：静音时段里发生的决策与完成不再记账——不响、不通知、不打标题标记，时段结束后也不会把夜里漏掉的一起发回来；本该在时段内发出的重复提醒直接作废而非顺延。更新提示移到分区顶部（页面回顶也能第一眼看到，不再需要滚动）；更新行文案简化。
-- **v1.6.4**（2026-10-11）更新完成后不用再手动往下翻：更新会替换插件自身的客户端文件、触发页面重载并回到顶部，现在「更新完成」提示出现时，「更新」行会**平滑滚动回视野**。
-- **v1.6.3**（2026-10-11）更新成功的提示不再一闪而过：更新结果改由**宿主**记住、随每次检查下发——即便更新替换掉了客户端自身文件、页面热重载丢掉本地状态，「更新完成：vX → vY，重启 DSH 后生效」也会一直显示到你重启；同时更新后**作废检查缓存**，不会再出现「明明刚升完却仍显示有新版」。
-- **v1.6.2**（2026-10-11）修复一键更新在**镜像源**下必然失败：npmmirror 的 tarball 会跳转到它的 CDN，而下载器此前拒绝一切重定向，于是「只要检查由镜像应答，下载就永远到不了」（真机演练实测发现）。现在重定向改为逐跳跟随、每一跳都必须仍落在受信主机上（镜像 CDN 是唯一合法跳转），sha512 校验不变；失败提示会带上失败阶段（下载 / 校验 / 解包 / 替换），便于定位。
-- **v1.6.1**（2026-10-11）README 重排为发布页风格：补「**与 DSH 界面保持一致**」一节讲清界面取自 DSH 自身设计体系；通篇表达润色，并修正升级说明（本插件自带更新，无需卸载重装）。本版同时是「一键更新」的发布演练。
-- **v1.6.0**（2026-10-11）新增**检查更新与一键更新**：设置里可查 npm 新版本并一键安装——下载后按 registry 公布的 sha512 校验、只解包白名单文件（拒绝符号链接与路径穿越）、先备份再替换、失败自动还原；下载内容从不执行，新代码在 DSH 重启时生效。自动检查每天最多一次、可关；npm 官方源不通时自动改用国内镜像。
-- **v1.5.0**（2026-10-08）「已完成」标题标记改为未读语义——离开期间发生的完成才标记，回到页面即清除，不再每次切走都重新出现；触发冷却按会话独立，2 秒内两个会话先后需要决策时都会响。补齐宿主半测试（配置 schema、唤窗路由、标题匹配）并交叉校验两半共享常量；`dsh.client.inject` 显式声明 sessions 提供包；静音时段结束后的补发行为写入文档。
+For anyone hacking on the code (exact details live in the source comments):
 
-- **v1.4.4**（2026-10-08）静音时段现在也会屏蔽任务栏标题提醒；进入或离开静音时段时，标题标记会自动刷新。自定义音效上传/移除按顺序写入配置，写入被拒时回滚；配置写入同步抛错也会按保存失败处理。
-- **v1.4.3**（2026-10-08）三处修复：环境不支持音频解码时，上传自定义铃声不再被误判为有效（反正也播不出来）；通知权限请求**同步抛错**也走拒绝处理，不留未处理异常；静音时段只接受合法 `HH:MM`（`99:99` 之类会被拒），Windows 原生唤窗抛错时继续走深链兜底。另补两条回归测试，并把解码失败的提示改准确（文件损坏与环境不支持解码两种情况都说清）。
-- **v1.4.2**（2026-10-07）干净发布点：`v1.4.1` 的标签发布时被重钉过一次，本版重新发布，让下游拿到确定的标签；无行为变更。
-- **v1.4.1**（2026-10-07）移除「没能唤回窗口」提示——判据会误报（窗口明明回来了还弹），而成功本身就是反馈；点通知现在全程静默，不再有任何跟点击弹出的通知。另：README 改版为发布页风格。
-- **v1.4.0**（2026-10-07）看过就不再重复提醒；修复通知点击没反应（根因：平台 `tag` 替换吞掉点击）；新增「子智能体的提醒」开关；另修标题前缀叠加等 5 项。
-- **v1.3.3**（2026-10-07）重复提醒不再打扰正在看窗口的你；标题提醒改用文字（待处理 / 已完成）。
-- **v1.3.2**（2026-10-05）两轮代码审查修复：非法 base64 中断跟踪器、通知对象回收、重复提醒吃冷却、时钟回拨静音、titleFlash 即时生效。
-- **v1.3.1**（2026-10-05）修复唤窗时好时坏（Windows 前台锁）。
-- **v1.3.0**（2026-10-05）唤窗改为进程内 FFI；桌面端/浏览器端自动区分。
-- **v1.2.1**（2026-10-05）修复点击无反应。
-- **v1.2.0**（2026-10-05）新增宿主 focus 路由（该版本点击无效，v1.3.x 修正）。
-- **v1.1.2**（2026-10-05）修复下拉列表空白。
-- **v1.1.1**（2026-10-05）排版与文案修复。
-- **v1.1.0**（2026-10-05）自定义铃声、系统通知、分轨音效、重复提醒、静音时段、三种新音效。
-- **v1.0.0**（2026-10-04）首个版本。
+- **Triggers never touch the event waterfall**: approval/question requests are waterfall events that a late listener can miss, so this plugin reads `uiSession.sessionStatus` (the same aggregated pending/running facts the sidebar status dots use) and just observes.
+- **Repeat cadence**: unanswered decisions are checked every 15s; **seen means done** — appearing while you are at the window, or coming back to it, ends the reminders for good (switching away does not re-arm); a new question replacing an old one resets the timer. A reminder that comes due during quiet hours is dropped rather than deferred.
+- **Click-to-return**: a renderer cannot raise an OS window, so a click POSTs to the Host's fenced `/notify-sounds/focus` route and the Host raises it. On Windows the Host calls `user32.dll` through DSH's own bundled `koffi` (no new dependency, window calls only, no PowerShell — that shape trips security software and gets blamed on DSH); Desktop vs browser is derived from the `Origin` header, so a browser click never drags the Desktop window forward.
+- **Notification collapsing**: the `tag` is not handed to the platform (a superseded toast swallows clicks aimed at it); the plugin closes the old notification itself and holds every generation's object so a late click always has a handler.
+- **Title mark**: prefix add/remove only, so DSH's own title management is untouched; the written prefix is remembered verbatim, so a language switch neither stacks nor leaks it. "Finished" is unread news — set by a finish that happens while the page is hidden, retired when you return — not a standing idle fact, so it does not reappear on every later switch-away.
+- **Quiet hours mean forgotten, not queued**: a decision or finish that arrives during the quiet range is not recorded at all — no sound, no notification, no title mark — and nothing that was missed overnight is delivered when the window ends.
+- **Cooldown and robustness**: the same trigger does not fire twice within 2s for the same session (a second conversation's decision still rings); volume is guarded with `Number.isFinite` (a hand-edited `.nan` falls back to the default); a refused write snaps the control back and shows an error row; toggles disable mid-write against double-tap races.
+- **The volume slider** is uncontrolled: dragging paints one CSS custom property and only the release commits, so it never stutters or snaps back.
+- **Theme and layout**: `--dsw-alias-*` tokens throughout, section and row geometry copied from the official preference pages; sound pickers use the official `Menu` dropdown so nothing scrolls sideways.
 
-## 💻 开发
+## 📜 Changelog
+
+- **v1.6.8** (2026-10-12) Review fixes and optimizations: the auto-check first-frame timing gap is closed (`undefined` is no longer treated as permission to reach out); an orphaned JSDoc is removed; the teardown assertion now actually verifies listener removal; `normalizedGain` samples every 8th frame (2.6M → 330K iterations for a 30-second upload); the master gain disconnects after playback ends (no more audio-node leak); `swapNavIcon` is wrapped in try/catch and preserves the original node for restore on dispose (React re-renders can no longer crash it); the cooldown table evicts the oldest entry instead of clearing all; and `sessionRows` caches one snapshot per synchronous block.
+- **v1.6.7** (2026-10-12) Three fixes from the review: a macOS browser tab is no longer mislabeled "not supported" for the title alert (`isDesktopShell` is the right criterion, not `isMac` alone); the first-frame timing gap in the auto-check guard is closed (`undefined` is no longer treated as permission); and three comments that no longer matched the code are corrected. Plus BUG-1 regression tests covering the suspended AudioContext path.
+- **v1.6.6** (2026-10-12) Nine fixes from an audit: sounds are no longer lost under the browser autoplay policy, and no longer "banked" to fire together at some later click (first-gesture unlock, and nothing is scheduled while the context cannot play); the macOS window raise now activates by bundle id with the deep link as fallback and logs its failures; update rollback is complete — files the update added are removed again, no temp file survives, and the backup is cleaned up once the swap succeeds; checks and updates are single-flight, so two pages clicking at once neither collide nor double-request; turning automatic checks off now really keeps the plugin quiet; a mobile browser that refuses to build a notification is reported as unsupported instead of showing a switch that can never work; and the nav glyph is back on the artwork's own 17×17 coordinate system. Platform notes are now labelled where they apply: the title alert says macOS does not support it, and repeat reminders note that background browser tabs throttle timers.
+- **v1.6.5** (2026-10-11) Quiet hours now mean forgotten, not queued: decisions and finishes that arrive during the quiet range get no reminder and no title mark, and nothing that was missed overnight is delivered when the window ends; reminders that come due inside it are dropped rather than deferred. The update outcome now appears at the top of the section (visible the moment the page reloads, no scrolling), and the update row's copy is simpler.
+- **v1.6.4** (2026-10-11) No more scrolling to find the news: an update swaps the plugin's own client file and the page reloads at the top, so the row now scrolls itself back into view when the outcome appears.
+- **v1.6.3** (2026-10-11) The update-success message no longer flashes and vanishes: the Host remembers the install and repeats it with every check, so "Updated, restart DSH to load it" survives the page reload the update itself triggers (it swaps the client half's own file) and stays until the restart. The cached check is invalidated after an install too, so the row can no longer claim a newer version than the one it just wrote.
+- **v1.6.2** (2026-10-11) Fixed one-click update always failing when the mainland mirror answered the check: the mirror serves its tarballs from its CDN, and the downloader refused every redirect — so the download could never finish (found by the live drill). Redirects are now followed one hop at a time with every hop checked against the trusted hosts (the mirror's CDN is the one legitimate hop); the sha512 check is unchanged. A failure now names the stage it died at (check / download / verify / unpack / replace).
+- **v1.6.1** (2026-10-11) The README is rebuilt as a release page: a new **Consistent with DSH's own UI** section on how the UI matches DSH's own settings, copy polished throughout, and the upgrade notes corrected — the plugin updates itself, so no uninstall is needed. This release doubles as the live drill for one-click update.
+- **v1.6.0** (2026-10-11) New: **check for updates and install them in one click**. The settings section can fetch the newest npm version and install it: the download is checked against the registry's published sha512, only whitelisted files are unpacked (symlinks and path traversal are refused), the old files are kept aside, and any failure restores them. Downloaded code is never executed — the new code loads when DSH restarts. Automatic checks run at most once a day and can be turned off, with the mainland-China mirror as fallback.
+- **v1.5.0** (2026-10-08) The "finished" title mark is unread news now — set by a finish that happens while you are away, cleared when you return — instead of reappearing on every switch-away. The retrigger cooldown is per session, so two conversations deciding within 2 seconds both ring. The Host half gained tests (Config schema, focus route, title matching) that cross-check the shared constants between the halves; the sessions provider is now an explicit load prerequisite, and quiet-hours catch-up is documented.
+
+- **v1.4.4** (2026-10-08) Quiet hours now suppress the taskbar title alert too, and the title refreshes as the quiet-hours window begins or ends. Custom-sound upload/removal writes are ordered and roll back on refusal; synchronous config-write errors are handled as save failures.
+- **v1.4.3** (2026-10-08) Three fixes: an upload is no longer accepted when the environment cannot decode audio (it could never play anyway); a synchronous throw from the notification-permission request is handled like a denial instead of escaping; quiet hours only accept valid `HH:MM`, and a throwing native window raise now falls through to the deep-link fallback. Plus two regression tests and a decode-error message that names both causes.
+- **v1.4.2** (2026-10-07) Clean release point: the `v1.4.1` tag was re-pinned during publishing, so this republishes under a tag downstream can trust. No behaviour change.
+- **v1.4.1** (2026-10-07) Removed the "could not raise the window" notice — it misfired even when the window came back, and success is its own feedback; a notification click is now fully silent. Also: the READMEs are rewritten as a release page.
+- **v1.4.0** (2026-10-07) Seen once, never repeated; fixed notification clicks doing nothing (root cause: platform `tag` replacement swallowing the click); new **Sub-agent alerts** toggle; plus five smaller fixes.
+- **v1.3.3** (2026-10-07) Repeat reminders no longer interrupt you while you are looking at the window; the title alert uses words.
+- **v1.3.2** (2026-10-05) Fixes from two code reviews: malformed base64 aborting the tracker, notification objects collected, repeat pings eating the cooldown, backwards clock muting, `titleFlash` applying immediately.
+- **v1.3.1** (2026-10-05) Fixed the intermittent window raise (Windows foreground lock).
+- **v1.3.0** (2026-10-05) The raise runs in-process over FFI; Desktop vs browser derived automatically.
+- **v1.2.1** (2026-10-05) Fixed the click doing nothing.
+- **v1.2.0** (2026-10-05) Added the Host focus route (clicks did not work in this release; fixed in v1.3.x).
+- **v1.1.2** (2026-10-05) Fixed blank dropdown rows.
+- **v1.1.1** (2026-10-05) Layout and copy fixes.
+- **v1.1.0** (2026-10-05) Custom ringtones, system notifications, per-trigger sounds, repeat reminders, quiet hours, three new sounds.
+- **v1.0.0** (2026-10-04) Initial release.
+
+## 💻 Development
 
 ```powershell
-npm install             # 一次性：宿主测试需要 schemastery 开发依赖
-node test/smoke.mjs     # 客户端半：装配、触发、冷却、静音、重复提醒、通知点击、子智能体过滤
-node test/host.mjs      # 宿主半：配置 schema、唤窗路由、标题匹配、两半契约交叉校验
+npm install             # once: the Host tests need the schemastery devDependency
+node test/smoke.mjs     # client half: assembly, triggers, cooldown, quiet hours, repeat reminders, notification clicks, sub-agent filtering
+node test/host.mjs      # host half: config schema, focus route, title matching, cross-half contracts
 ```
 
-发布到 npm：升好版本号后 `npm publish`（首次发布先 `npm login` 并按提示开启 2FA）。**npm 的版本号不可覆盖**——有任何改动都请升版本再发。
+To publish to npm: bump the version, then `npm publish` (`npm login` and 2FA the first time). **npm versions are immutable** — bump for every change.
 
 ```
 dsh-plugin-notify-sounds/
 ├── package.json        # dsh.bundle.patch + dsh.client
-├── cordis.patch.yml    # Loader 行：id: notify-sounds
+├── cordis.patch.yml    # Loader row: id: notify-sounds
 ├── lib/
-│   ├── index.js        # Host 半：配置模式 + 点通知唤窗路由
-│   └── client.js       # Client 半：音效引擎、状态监听、设置分区
+│   ├── index.js        # Host half: config schema + click-to-return route
+│   └── client.js       # Client half: sound engine, status watcher, settings section
 └── test/
-    ├── smoke.mjs       # 客户端半
-    └── host.mjs        # 宿主半
+    ├── smoke.mjs       # client half
+    └── host.mjs        # host half
 ```
 
-`package.json` 已按可发布形态声明（`files` 只带运行时产物，`@deepseek-ai/schemastery` 为 peerDependency、另有一份 devDependency 供宿主测试，纯 ESM、无构建步骤），日后发 npm 直接 `npm publish` 即可。
+`package.json` is publishable as-is (`files` carries runtime artifacts only, `@deepseek-ai/schemastery` is a peerDependency plus a devDependency copy for the Host tests, pure ESM with no build step) — `npm publish` whenever you want it on npm.
 
 ## 📄 License
 
