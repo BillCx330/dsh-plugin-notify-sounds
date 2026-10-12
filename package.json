@@ -18,7 +18,7 @@
     "lib/index.js",
     "lib/client.js",
     "cordis.patch.yml",
-    "README.zh.md",
+    "README.en.md",
     "assets"
   ],
   "license": "MIT",
