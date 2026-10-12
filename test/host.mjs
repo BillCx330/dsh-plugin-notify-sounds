@@ -21,7 +21,7 @@
 
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -462,7 +462,8 @@ assert.throws(() => host.verifyIntegrity(sampleBytes, 'md5-abc'), /sha512/, 'a n
 // End to end, against throwaway installations.
 const realFetchForApply = globalThis.fetch;
 const realClockForApply = Date.now;
-Date.now = () => 2_000_000_000_000;
+let applyClock = 2_000_000_000_000;
+Date.now = () => applyClock;
 const applyRequests = [];
 /** Answer the registry, then serve the tarball it names. */
 const serve = (version, archive, integrityOverride) => {
@@ -506,7 +507,7 @@ try {
 	assert.equal(JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version, '9.9.9', 'the manifest is swapped');
 	assert.equal(readFileSync(join(root, 'lib', 'client.js'), 'utf8'), 'new client', 'the code is swapped');
 	assert.equal(readFileSync(join(root, 'lib', 'index.js'), 'utf8'), 'old index', 'a file the archive did not carry is left alone');
-	assert.ok(readFileSync(join(root, '.update-backup', 'package.json'), 'utf8').includes('1.0.0'), 'the replaced files are kept aside');
+	assert.equal(existsSync(join(root, '.update-backup')), false, 'the backup is cleaned up once the swap succeeds');
 	assert.equal(applyRequests.length, 2, 'one registry answer and one download');
 	assert.ok(applyRequests[1].endsWith('.tgz'), 'the download comes from the tarball the registry named');
 
@@ -562,6 +563,43 @@ try {
 	assert.ok(readFileSync(join(broken, 'package.json'), 'utf8').includes('1.0.0'), 'the manifest is restored');
 	assert.equal(readFileSync(join(broken, 'LICENSE'), 'utf8'), 'old license', 'and the other files are untouched');
 	rmSync(broken, { recursive: true, force: true });
+
+	// A failed update leaves NOTHING behind: a file the update ADDED must go
+	// away again (there is no backup to restore it from), and no temp file
+	// may survive either.
+	const added = makeInstall('1.0.0');
+	rmSync(join(added, 'lib'), { recursive: true, force: true });
+	writeFileSync(join(added, 'lib'), 'not a directory');
+	serve('9.9.9', buildTar([...goodFiles, ['package/README.md', 'new readme']]));
+	const rolledBack = await host.applyUpdate({ root: added });
+	assert.equal(rolledBack.ok, false, 'the failure is reported as before');
+	assert.equal(existsSync(join(added, 'README.md')), false, 'a file the update added is removed again on rollback');
+	assert.ok(readFileSync(join(added, 'package.json'), 'utf8').includes('1.0.0'), 'the manifest is restored');
+	assert.equal(existsSync(join(added, 'package.json.update-tmp')), false, 'no temp file survives a failed update');
+	assert.equal(existsSync(join(added, 'lib', 'client.js.update-tmp')), false, 'and none survives at any depth');
+	rmSync(added, { recursive: true, force: true });
+
+	// Two callers at once share one download and one swap: they would
+	// otherwise fight over the fixed temp names and the single backup
+	// directory, and the slower one's cleanup would undo the faster one's
+	// work.
+	const shared = makeInstall('1.0.0');
+	serve('9.9.9', buildTar(goodFiles));
+	applyRequests.length = 0;
+	const [first, second] = await Promise.all([host.applyUpdate({ root: shared }), host.applyUpdate({ root: shared })]);
+	assert.equal(first.ok, true, 'the first caller gets the update');
+	assert.equal(second, first, 'the second caller joins the same run');
+	assert.equal(applyRequests.length, 2, 'and the registry sees one answer and one download');
+	rmSync(shared, { recursive: true, force: true });
+
+	// The same guard covers a check: the settings row and the notice above it
+	// mount together, and neither the TTL nor the spacing rule can see a
+	// request that is still in flight.
+	applyClock += 25 * 60 * 60 * 1000;
+	applyRequests.length = 0;
+	const [one, two] = await Promise.all([host.checkForUpdate({ force: true }), host.checkForUpdate({ force: true })]);
+	assert.equal(two, one, 'concurrent checks share one request');
+	assert.equal(applyRequests.length, 1, 'and only one request goes out');
 
 	// The apply route is fenced and serves nothing but POST.
 	const applyRoute = registeredRoutes.find((entry) => entry.path === host.UPDATE_APPLY_PATH);
