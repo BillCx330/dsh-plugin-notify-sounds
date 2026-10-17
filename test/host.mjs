@@ -105,6 +105,27 @@ assert.ok(!host.isDesktopTitle('DeepSeek Harness — Another App'), 'a title tha
 assert.ok(!host.isDesktopTitle('Another App'), 'another app does not match');
 assert.ok(!host.isDesktopTitle(''), 'an empty title does not match');
 
+// Reading the title takes two Win32 calls, and the page can rewrite its title
+// between them — switching sessions is exactly when it does. The second call
+// then copies fewer characters than the first one counted, so the result has to
+// be sliced by what actually came back. Slicing by the older count leaves NUL
+// characters on the end, `endsWith('— DeepSeek Harness')` stops matching, and
+// the click silently does nothing (it heals on the next click, which is what
+// made it look random).
+const titleNative = (declared, actual) => ({
+	GetWindowTextLengthW: () => declared,
+	GetWindowTextW: (handle, buffer) => {
+		for (let index = 0; index < actual.length; index++) buffer[index] = actual.charCodeAt(index);
+		return actual.length;
+	},
+});
+const shrunken = host.windowTitle(titleNative(24, 'Ti'), 1);
+assert.equal(shrunken, 'Ti', 'a title that shrank between the two calls is sliced by what was copied');
+assert.ok(!shrunken.includes('\0'), 'and the result carries no NUL padding');
+assert.equal(host.windowTitle(titleNative(3, 'abc'), 1), 'abc', 'an unchanged title reads back whole');
+assert.equal(host.windowTitle(titleNative(24, '会话 — DeepSeek Harness'), 1), '会话 — DeepSeek Harness', 'a title that grew is not truncated either');
+assert.equal(host.windowTitle({ GetWindowTextLengthW: () => 0, GetWindowTextW: () => 0 }, 1), '', 'a window without a title reads as empty');
+
 // --- Assertions: focus route -----------------------------------------------------
 const configureCalls = [];
 const registeredRoutes = [];
@@ -240,6 +261,18 @@ assert.equal(host.compareVersions('1.5.0', '1.5.0'), 0, 'equal versions compare 
 assert.ok(host.compareVersions('1.5.0-rc.1', '1.5.0') < 0, 'a prerelease sorts before its release');
 assert.ok(host.compareVersions('1.5.0', '1.5.0-rc.1') > 0, 'a release sorts after its prerelease');
 assert.ok(host.compareVersions('2.0.0', '1.99.99') > 0, 'the major part decides first');
+
+// Prerelease identifiers compare by semver's rules, not as strings. The string
+// order gets the common case backwards — "rc.10" < "rc.9" letter by letter —
+// so a registry answering with a later release candidate would look OLDER than
+// what is installed and the update would never be offered.
+assert.ok(host.compareVersions('1.5.0-rc.9', '1.5.0-rc.10') < 0, 'rc.9 sorts before rc.10 (numeric identifiers compare as numbers)');
+assert.ok(host.compareVersions('1.5.0-rc.10', '1.5.0-rc.9') > 0, 'and rc.10 sorts after rc.9');
+assert.ok(host.compareVersions('1.5.0-alpha', '1.5.0-beta') < 0, 'alphanumeric identifiers compare in ASCII order');
+assert.ok(host.compareVersions('1.5.0-1', '1.5.0-alpha') < 0, 'a numeric identifier ranks below an alphanumeric one');
+assert.ok(host.compareVersions('1.5.0-alpha', '1.5.0-alpha.1') < 0, 'more fields win when every shared field is equal');
+assert.ok(host.compareVersions('1.5.0-rc.1', '1.5.0') < 0, 'a prerelease still sorts before its own release');
+assert.equal(host.compareVersions('1.5.0-rc.1', '1.5.0-rc.1'), 0, 'identical prereleases compare equal');
 
 // Where a tarball may live: https only, and only the two registries consulted.
 assert.ok(host.isTrustedTarball('https://registry.npmjs.org/dsh-plugin-notify-sounds/-/dsh-plugin-notify-sounds-1.5.0.tgz'), 'the npm tarball host is trusted');
@@ -436,20 +469,117 @@ const buildTar = (entries, options = {}) => {
 	return options.gzip === false ? archive : gzipSync(archive);
 };
 
-// What an archive may carry.
-const goodFiles = [['package/package.json', '{"version":"9.9.9"}'], ['package/lib/client.js', 'new client']];
+// What an archive may carry. The manifest is payload like any other file, and
+// the update checks it against the registry's answer, so a fake release has to
+// look like the real package.
+const manifestFor = (version) => JSON.stringify({ name: 'dsh-plugin-notify-sounds', version });
+const goodFiles = [['package/package.json', manifestFor('9.9.9')], ['package/lib/client.js', 'new client']];
 const unpacked = host.unpackTar(buildTar(goodFiles, { gzip: false }));
-assert.equal(unpacked.size, 2, 'the whitelisted files come through');
+assert.equal(unpacked.size, 2, 'the files come through');
 assert.equal(new TextDecoder().decode(unpacked.get('lib/client.js')), 'new client', 'contents are carried verbatim');
 assert.ok(!unpacked.has('package/lib/client.js'), 'keys are package-relative, not archive paths');
 
+// The file list is a RULE, not an inventory. A later release may add files, in
+// directories the running code has never heard of, and an older installation
+// must accept them: that is the property this whole change exists for. The
+// previous design refused every name it did not already list, which made any
+// release that added one permanently uninstallable by every older install —
+// the updater that runs during an update is the one already on disk.
+const grown = host.unpackTar(buildTar([
+	...goodFiles,
+	['package/lib/update.js', 'a module a later release added'],
+	['package/assets/icon.svg', '<svg/>'],
+], { gzip: false }));
+assert.equal(grown.size, 4, 'a release may add files the running code has never heard of');
+assert.equal(new TextDecoder().decode(grown.get('lib/update.js')), 'a module a later release added', 'the new module comes through');
+assert.equal(new TextDecoder().decode(grown.get('assets/icon.svg')), '<svg/>', 'so does a new file in a new directory');
+
 // Where an archive may not reach.
-for (const path of ['package/../evil.txt', 'package/../../etc/passwd', 'evil.txt', 'package/extra.txt', '/package/package.json', 'package\\..\\evil.txt']) {
+for (const path of ['package/../evil.txt', 'package/../../etc/passwd', 'evil.txt', '/package/package.json', 'package\\..\\evil.txt', 'package/lib/./client.js']) {
 	assert.throws(() => host.unpackTar(buildTar([[path, 'x']], { gzip: false })), /refusing tar path/, `"${path}" is refused`);
 }
+// Names this updater reserves for its own work, and files a package manager
+// reads as configuration: no archive may describe them, however it is spelled.
+for (const path of ['package/.update-backup/package.json', 'package/lib/index.js.update-tmp', 'package/node_modules/x/index.js', 'package/.git/config', 'package/.npmrc', 'package/.pnpmfile.cjs', 'package/.update-manifest.json']) {
+	assert.throws(() => host.unpackTar(buildTar([[path, 'x']], { gzip: false })), /refusing tar path/, `"${path}" is refused`);
+}
+// Windows and macOS filesystems are case-insensitive: these two entries would
+// silently become one file, and which one wins depends on the archive's order.
+assert.throws(
+	() => host.unpackTar(buildTar([['package/lib/client.js', 'a'], ['package/LIB/Client.js', 'b']], { gzip: false })),
+	/differ only in case/,
+	'two entries that differ only by case are refused',
+);
 assert.throws(() => host.unpackTar(buildTar([['package/package.json', 'x', '2']], { gzip: false })), /non-file tar entry/, 'a symlink entry is refused');
 assert.throws(() => host.unpackTar(new Uint8Array(1024)), /no usable files/, 'an empty archive is refused');
 assert.throws(() => host.unpackTar(buildTar([['package/package.json', 'x']], { gzip: false }).subarray(0, 512)), /claims more/, 'a truncated archive is refused');
+// A bounded download must not become unbounded disk usage: the declared sizes
+// are summed and the entry count is capped.
+const manyFiles = Array.from({ length: 300 }, (_, index) => [`package/lib/module-${index}.js`, 'x']);
+assert.throws(() => host.unpackTar(buildTar(manyFiles, { gzip: false })), /more files than/, 'an archive with too many files is refused');
+
+// The manifest check. With the inventory gone this is what still ties the bytes
+// to a package and a version — and the next check trusts whatever manifest this
+// update leaves on disk, so a wrong one would make "an update landed" a lie the
+// check cannot see through.
+host.verifyManifest(new Map([['package.json', new TextEncoder().encode(manifestFor('9.9.9'))]]), '9.9.9');
+assert.throws(() => host.verifyManifest(new Map(), '9.9.9'), /no package.json/, 'an archive without a manifest is refused');
+assert.throws(() => host.verifyManifest(new Map([['package.json', new TextEncoder().encode('{')]]), '9.9.9'), /not readable JSON/, 'an unreadable manifest is refused');
+assert.throws(
+	() => host.verifyManifest(new Map([['package.json', new TextEncoder().encode(JSON.stringify({ name: 'something-else', version: '9.9.9' }))]]), '9.9.9'),
+	/is not dsh-plugin-notify-sounds/,
+	'an archive for another package is refused',
+);
+assert.throws(
+	() => host.verifyManifest(new Map([['package.json', new TextEncoder().encode(manifestFor('9.9.8'))]]), '9.9.9'),
+	/where the registry said/,
+	'a manifest that disagrees with the registry is refused',
+);
+// A path that differs from an entry point the manifest itself declares only by
+// case would replace `lib/client.js` on Windows and macOS and sit there dead on
+// Linux — one archive, two installations. The set is read from the archive's own
+// manifest, never from a list held in the code.
+assert.throws(
+	() => host.verifyManifest(new Map([
+		['package.json', new TextEncoder().encode(JSON.stringify({ name: 'dsh-plugin-notify-sounds', version: '9.9.9', main: 'lib/index.js', exports: { './client': './lib/client.js' } }))],
+		['LIB/Client.js', new TextEncoder().encode('clobber')],
+	]), '9.9.9'),
+	/differs only in case/,
+	'a case variant of a declared entry point is refused',
+);
+host.verifyManifest(new Map([
+	['package.json', new TextEncoder().encode(JSON.stringify({ name: 'dsh-plugin-notify-sounds', version: '9.9.9', main: 'lib/index.js' }))],
+	['lib/index.js', new TextEncoder().encode('ok')],
+	['assets/icon.svg', new TextEncoder().encode('<svg/>')],
+]), '9.9.9');
+
+// --- The ≤1.6.9 migration invariant ---------------------------------------------
+// Versions up to 1.6.9 carry a fixed list of seven filenames and refuse an
+// archive containing anything else, so a release that ADDS a name cannot be
+// installed by them. Keeping that path open is what lets those installs reach
+// 1.7.0 at all, and it is a property of the PUBLISHED FILE SET rather than of
+// any code here — so it is asserted here. When support for ≤1.6.9 is dropped on
+// purpose, delete this check and say so in the README: it must never be
+// discovered by a user whose update failed.
+const V169_WHITELIST = ['package.json', 'cordis.patch.yml', 'README.md', 'README.zh.md', 'LICENSE', 'lib/client.js', 'lib/index.js'];
+const ownManifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
+// `files` is what npm packs, plus the names it always includes (the manifest,
+// the readme, the license) — the same seven `npm pack --dry-run` reports.
+for (const name of [...ownManifest.files, 'package.json', 'README.md', 'LICENSE']) {
+	assert.ok(V169_WHITELIST.includes(name), `"${name}" must stay inside the 1.6.9 whitelist, or installs older than 1.7.0 cannot update to this release`);
+}
+
+// The write side keeps its own guard. `unpackTar` already refuses a climbing
+// path, so this is the second lock on the same door — and it is the one that
+// still holds if a caller ever hands `installUpdate` a map from somewhere else.
+const guardedRoot = mkdtempSync(join(tmpdir(), 'notify-sounds-guard-'));
+assert.throws(
+	() => host.installUpdate(guardedRoot, new Map([['../escaped.txt', new TextEncoder().encode('x')]])),
+	/refusing to write outside the package/,
+	'installUpdate refuses a path that leaves the package directory',
+);
+assert.equal(existsSync(join(guardedRoot, '..', 'escaped.txt')), false, 'and nothing was written there');
+rmSync(guardedRoot, { recursive: true, force: true });
 
 // What a digest must prove before a byte is written.
 const sampleBytes = new TextEncoder().encode('tarball bytes');
@@ -511,6 +641,21 @@ try {
 	assert.equal(applyRequests.length, 2, 'one registry answer and one download');
 	assert.ok(applyRequests[1].endsWith('.tgz'), 'the download comes from the tarball the registry named');
 
+	// A release that ADDS files installs them, including into a directory that
+	// did not exist yet. This is the end-to-end form of the property the rule
+	// change exists for: an installation running this version must be able to
+	// take a later release that carries files it has never seen.
+	const growing = makeInstall('1.0.0');
+	serve('9.9.9', buildTar([...goodFiles, ['package/lib/update.js', 'new module'], ['package/assets/icon.svg', '<svg/>']]));
+	const grew = await host.applyUpdate({ root: growing });
+	assert.equal(grew.ok, true, 'a release carrying new files is applied');
+	assert.equal(grew.stage, undefined, 'and it reports no failure stage');
+	assert.equal(readFileSync(join(growing, 'lib', 'update.js'), 'utf8'), 'new module', 'the new module is written');
+	assert.equal(readFileSync(join(growing, 'assets', 'icon.svg'), 'utf8'), '<svg/>', 'and so is a file in a directory that did not exist');
+	assert.equal(JSON.parse(readFileSync(join(growing, 'package.json'), 'utf8')).version, '9.9.9', 'the manifest is swapped last, but it is swapped');
+	assert.equal(existsSync(join(growing, '.update-backup')), false, 'and the backup is cleaned up');
+	rmSync(growing, { recursive: true, force: true });
+
 	// The cached "update available" answer is a lie now. A check after the
 	// install must re-read the manifest it just wrote — and it repeats the
 	// install it just made, so the row can keep saying so even after the page
@@ -564,20 +709,122 @@ try {
 	assert.equal(readFileSync(join(broken, 'LICENSE'), 'utf8'), 'old license', 'and the other files are untouched');
 	rmSync(broken, { recursive: true, force: true });
 
-	// A failed update leaves NOTHING behind: a file the update ADDED must go
-	// away again (there is no backup to restore it from), and no temp file
-	// may survive either.
+	// A failed update leaves NOTHING behind: a file the update ADDED must go away
+	// again (there is no backup to restore it from), no temp file may survive,
+	// and neither may a directory the update created. The archive order is chosen
+	// so the added file is written BEFORE the write that fails — the manifest is
+	// written last now, so a failure lands on the entry before it in this list.
 	const added = makeInstall('1.0.0');
 	rmSync(join(added, 'lib'), { recursive: true, force: true });
 	writeFileSync(join(added, 'lib'), 'not a directory');
-	serve('9.9.9', buildTar([...goodFiles, ['package/README.md', 'new readme']]));
+	serve('9.9.9', buildTar([['package/README.md', 'new readme'], ...goodFiles]));
 	const rolledBack = await host.applyUpdate({ root: added });
 	assert.equal(rolledBack.ok, false, 'the failure is reported as before');
+	assert.equal(rolledBack.stage, 'replace', 'and it happened while replacing files');
 	assert.equal(existsSync(join(added, 'README.md')), false, 'a file the update added is removed again on rollback');
 	assert.ok(readFileSync(join(added, 'package.json'), 'utf8').includes('1.0.0'), 'the manifest is restored');
 	assert.equal(existsSync(join(added, 'package.json.update-tmp')), false, 'no temp file survives a failed update');
 	assert.equal(existsSync(join(added, 'lib', 'client.js.update-tmp')), false, 'and none survives at any depth');
+	assert.equal(existsSync(join(added, '.update-backup')), false, 'and the backup directory is gone too');
 	rmSync(added, { recursive: true, force: true });
+
+	// A directory the update created goes away with the file it held.
+	const nested = makeInstall('1.0.0');
+	rmSync(join(nested, 'lib'), { recursive: true, force: true });
+	writeFileSync(join(nested, 'lib'), 'not a directory');
+	serve('9.9.9', buildTar([['package/assets/icons/new.svg', '<svg/>'], ...goodFiles]));
+	const nestedRolled = await host.applyUpdate({ root: nested });
+	assert.equal(nestedRolled.ok, false, 'the write into the new directory is attempted first, then the failing one');
+	assert.equal(existsSync(join(nested, 'assets')), false, 'the directory the update created is removed again');
+	rmSync(nested, { recursive: true, force: true });
+
+	// A gzip stream must not be able to expand past the cap: the tarball size is
+	// bounded on the wire, and the decompressed size has to be bounded too or a
+	// small download becomes gigabytes of memory. The oversized content rides in
+	// a pax extension header, which `unpackTar` skips WITHOUT counting its size —
+	// so if the decompressor's own limit were removed this archive would sail
+	// through the per-file accounting and install, and this test would fail
+	// loudly instead of passing for the wrong reason.
+	const UNPACKED_CAP = 8 * 1024 * 1024 * 8;
+	const bomb = makeInstall('1.0.0');
+	serve('9.9.9', buildTar([['package/pax-header', Buffer.alloc(UNPACKED_CAP + 1024, 0x78), 'x'], ...goodFiles]));
+	const exploded = await host.applyUpdate({ root: bomb });
+	assert.equal(exploded.ok, false, 'an archive that expands past the cap is refused');
+	assert.equal(exploded.stage, 'unpack', 'and the failure is the unpack stage');
+	assert.ok(!String(exploded.error).includes('expands beyond'), 'the decompressor stopped it before the archive was ever materialized');
+	assert.ok(readFileSync(join(bomb, 'package.json'), 'utf8').includes('1.0.0'), 'nothing is written');
+	rmSync(bomb, { recursive: true, force: true });
+
+	// A manifest that is not this package at this version is refused before
+	// anything is written, whatever the archive's digest says.
+	const impostor = makeInstall('1.0.0');
+	serve('9.9.9', buildTar([['package/package.json', manifestFor('1.2.3')], ['package/lib/client.js', 'new client']]));
+	const mismatched = await host.applyUpdate({ root: impostor });
+	assert.equal(mismatched.ok, false, 'a manifest disagreeing with the registry is refused');
+	assert.equal(mismatched.stage, 'manifest', 'the failure names the manifest stage');
+	assert.equal(mismatched.to, '9.9.9', 'and the failure carries the version that was being installed');
+	assert.ok(readFileSync(join(impostor, 'package.json'), 'utf8').includes('1.0.0'), 'nothing was written');
+	rmSync(impostor, { recursive: true, force: true });
+
+	// A release can also DROP a file, and an archive cannot express that: it
+	// lists what exists, never what should go. The difference is computed
+	// against the record the previous update left behind — and only files that
+	// record names are ever deleted, so anything else in the directory stays.
+	const archiveOf = (version, extra = []) => buildTar([
+		['package/package.json', manifestFor(version)],
+		['package/lib/client.js', `client ${version}`],
+		...extra,
+	]);
+	const dropping = makeInstall('1.0.0');
+	serve('9.9.9', archiveOf('9.9.9', [['package/lib/legacy.js', 'old helper']]));
+	const installed = await host.applyUpdate({ root: dropping });
+	assert.equal(installed.ok, true, 'the first update installs');
+	assert.equal(readFileSync(join(dropping, 'lib', 'legacy.js'), 'utf8'), 'old helper', 'including a file it added');
+	assert.deepEqual(
+		JSON.parse(readFileSync(join(dropping, '.update-manifest.json'), 'utf8')).files,
+		['.update-manifest.json', 'lib/client.js', 'lib/legacy.js', 'package.json'],
+		'the record lists what this update installed, itself included',
+	);
+	writeFileSync(join(dropping, 'my-notes.txt'), 'mine');
+	serve('9.9.10', archiveOf('9.9.10'));
+	const droppingAgain = await host.applyUpdate({ root: dropping });
+	assert.equal(droppingAgain.ok, true, 'the next release installs');
+	assert.equal(existsSync(join(dropping, 'lib', 'legacy.js')), false, 'the file the new release dropped is deleted');
+	assert.equal(readFileSync(join(dropping, 'my-notes.txt'), 'utf8'), 'mine', 'a file no update ever wrote is left alone');
+	assert.deepEqual(
+		JSON.parse(readFileSync(join(dropping, '.update-manifest.json'), 'utf8')).files,
+		['.update-manifest.json', 'lib/client.js', 'package.json'],
+		'and the record moves on with the new file set',
+	);
+	rmSync(dropping, { recursive: true, force: true });
+
+	// An installation that predates the record — every ≤1.6.9 install, and the
+	// first update after it — prunes nothing: with no evidence of what an update
+	// wrote, guessing is the one thing that could delete a user's own file.
+	const unrecorded = makeInstall('1.0.0');
+	writeFileSync(join(unrecorded, 'lib', 'was-already-here.js'), 'before the record existed');
+	serve('9.9.9', archiveOf('9.9.9'));
+	const firstFromOld = await host.applyUpdate({ root: unrecorded });
+	assert.equal(firstFromOld.ok, true, 'an installation with no record still updates');
+	assert.equal(existsSync(join(unrecorded, 'lib', 'was-already-here.js')), true, 'and nothing is guessed away');
+	assert.equal(existsSync(join(unrecorded, '.update-manifest.json')), true, 'the record starts here, so the next update can prune');
+	rmSync(unrecorded, { recursive: true, force: true });
+
+	// A failure AFTER the prune puts the deleted file back. The record is the
+	// last thing written, so blocking its temporary name is what lands a failure
+	// behind the deletion.
+	const restoring = makeInstall('1.0.0');
+	writeFileSync(join(restoring, 'lib', 'legacy.js'), 'still needed');
+	writeFileSync(join(restoring, '.update-manifest.json'), JSON.stringify({ version: 1, files: ['.update-manifest.json', 'lib/client.js', 'lib/legacy.js', 'package.json'] }));
+	mkdirSync(join(restoring, '.update-manifest.json.update-tmp'), { recursive: true });
+	serve('9.9.9', archiveOf('9.9.9'));
+	const restoredAgain = await host.applyUpdate({ root: restoring });
+	assert.equal(restoredAgain.ok, false, 'a failure while writing the record is reported');
+	assert.equal(restoredAgain.stage, 'replace', 'and it is a replace-stage failure');
+	assert.equal(readFileSync(join(restoring, 'lib', 'legacy.js'), 'utf8'), 'still needed', 'the file this update deleted is back');
+	assert.ok(readFileSync(join(restoring, 'package.json'), 'utf8').includes('1.0.0'), 'and the files it replaced are back');
+	assert.equal(existsSync(join(restoring, '.update-backup')), false, 'the backup is gone again');
+	rmSync(restoring, { recursive: true, force: true });
 
 	// Two callers at once share one download and one swap: they would
 	// otherwise fight over the fixed temp names and the single backup

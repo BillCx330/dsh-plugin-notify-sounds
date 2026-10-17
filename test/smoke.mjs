@@ -158,6 +158,21 @@ function fakeNode(tag, text = '') {
 			walk(this);
 			return found;
 		},
+		querySelector(selector) {
+			// The nav-glyph patch probes its panel for the marker before
+			// walking it; that is the only attribute selector asked of an
+			// element here, so the fake serves exactly that one.
+			if (selector !== '[data-notify-sounds-icon]') return null;
+			const walk = (node) => {
+				for (const child of node.children) {
+					if (child.hasAttribute?.('data-notify-sounds-icon')) return child;
+					const found = walk(child);
+					if (found !== null) return found;
+				}
+				return null;
+			};
+			return walk(this);
+		},
 	};
 }
 
@@ -209,6 +224,23 @@ globalThis.setInterval = (fn, ms) => {
 };
 globalThis.clearInterval = () => {
 	renotifyChecker = null;
+};
+
+// Timer capture, the other half: the update check reschedules itself 30 seconds
+// and then a DAY out, and no test can wait for that. Delays of ten seconds or
+// more are recorded instead of scheduled. The threshold sits well above
+// everything else in play — the tests await with 30ms and 2100ms waits, and a
+// synthesized sound's tail is under a second (the longest preset is 0.88s) — and
+// below the plugin's own 30-second first check, so nothing real is ever
+// swallowed and the captured first entry is always that check.
+const longTimers = [];
+const realSetTimeout = globalThis.setTimeout;
+globalThis.setTimeout = (fn, ms, ...rest) => {
+	if (typeof ms === 'number' && ms >= 10_000) {
+		longTimers.push({ fn, ms });
+		return { unref() {} };
+	}
+	return realSetTimeout(fn, ms, ...rest);
 };
 
 // Notification API stub with a mutable permission.
@@ -274,6 +306,11 @@ const dispatchTitleMutation = () => {
 };
 
 // --- Load the Client half -----------------------------------------------------
+// Node ships a `localStorage` global that warns loudly unless it was given a
+// store file. This page has none, which is the case the plugin falls back for,
+// so say so explicitly — it keeps the warning out of the report, and shadowing
+// the accessor is the only way to ask without triggering it.
+Object.defineProperty(globalThis, 'localStorage', { value: undefined, configurable: true, writable: true });
 eval(readFileSync(join(root, 'lib/client.js'), 'utf8'));
 assert.equal(registration.id, 'dsh-plugin-notify-sounds', 'registers under its package id');
 
@@ -445,11 +482,16 @@ const ctx = {
 		},
 		bind(ns) {
 			// Resolve from the dictionary the plugin actually registered, so a
-			// test asserting on visible text is checking the real copy.
-			return (key) => {
+			// test asserting on visible text is checking the real copy — and
+			// interpolate `{name}` exactly the way the real resolver does
+			// (`template.replace(/\{(\w+)\}/g, ...)`), so a composed message is
+			// asserted in its composed form rather than as a raw template.
+			return (key, params) => {
 				if (key === 'nav') return '提示音';
 				const registered = localeRegistrations.filter((entry) => entry.ns === ns).at(-1);
-				return registered?.dicts?.zh?.[key] ?? key;
+				const template = registered?.dicts?.zh?.[key] ?? key;
+				if (params === undefined) return template;
+				return template.replace(/\{(\w+)\}/g, (match, name) => (name in params ? String(params[name]) : match));
 			};
 		},
 		subscribe(listener) {
@@ -607,7 +649,13 @@ assert.equal(tree.children[0].length, 4, 'title, intro, the update notice, rows'
 assert.equal(tree.children[0][0].type, 'h2', 'the title is a heading like the shipped sections');
 assert.equal(tree.children[0][1].type, 'p', 'the intro is a paragraph');
 assert.equal(tree.children[0][2].type?.name, 'UpdateNotice', 'the update notice sits right under the intro, where the page lands');
-assert.equal(tree.children[0][3].children[0].length, 14, 'fourteen rows render: switch, volume, three pickers, sub-agent scope, custom, notification, flash, renotify, quiet, hidden, update toggle, update row');
+const rows = tree.children[0][3].children[0];
+assert.equal(rows.length, 14, 'fourteen rows render');
+assert.deepEqual(
+	rows.map((row) => row.props.key),
+	['enabled', 'volume', 'decision', 'question', 'completion', 'custom', 'subagent', 'systemNotify', 'titleFlash', 'renotify', 'quiet', 'onlyWhenHidden', 'updateAutoCheck', 'update'],
+	'row order: master switch, volume, the three triggers, the custom sound those triggers can pick, then sub-agent scope, notification, title flash, repeat reminder, quiet hours, hidden-only, the auto-check toggle and the update row',
+);
 
 // --- Assertions: uncontrolled volume slider ------------------------------------
 let inputElement;
@@ -1072,7 +1120,11 @@ const getCustomRow = () => {
 		preview: injected.preview,
 		t: (key) => key,
 	}));
-	return currentTree.children[0][3].children[0][6];
+	// Looked up by key rather than by position: the row order is a design
+	// choice that has already changed once (the custom sound moved up to sit
+	// with the three triggers), and a positional index silently grabs whatever
+	// row happens to land there.
+	return currentTree.children[0][3].children[0].find((row) => row.props.key === 'custom');
 };
 const realRemoveFormSet = form.set;
 form.set = (field, value) => field === 'customSoundName'
@@ -1239,6 +1291,190 @@ assert.equal(fetchCalls[0].init.method, 'GET', 'the check is a GET');
 	for (const dispose of effects) dispose();
 	for (const fn of documentListeners['pointerdown'] ?? []) fn();
 	assert.equal(resumeCalls, beforeDispose, 'the unlock listener is removed after the effect is disposed');
+}
+
+// --- The update copy: composed messages, not concatenated fragments -------------
+// The English row used to render "Updated：v1.6.8 → v1.6.9，restart DSH to load
+// it": the punctuation was baked into the JSX, so the English UI inherited
+// full-width stops from the Chinese sentence. The composed messages live in the
+// dictionaries now, which makes both halves of that checkable.
+{
+	const dict = localeRegistrations[0].dicts;
+	assert.ok(dict.zh['update.doneDetail'].includes('{from}') && dict.zh['update.doneDetail'].includes('{to}'), 'the completion line takes both versions');
+	assert.ok(dict.zh['update.reinstall'].includes('{url}') && dict.en['update.reinstall'].includes('{url}'), 'the reinstall advice carries the repository');
+	assert.ok(dict.zh['update.retry'].includes('{url}') && dict.en['update.retry'].includes('{url}'), 'and so does the retry advice');
+	const fullWidthStop = /[：，。；！？（）]/;
+	for (const [key, value] of Object.entries(dict.en)) {
+		assert.ok(!fullWidthStop.test(String(value)), `the English copy for "${key}" carries no full-width punctuation`);
+	}
+	// The advice is keyed off the stage the Host names, so every stage it can
+	// report needs a localized word — otherwise a failure would print the raw
+	// internal name, which is what the row used to do.
+	const stageKeys = Object.keys(dict.zh)
+		.filter((key) => key.startsWith('update.stage.'))
+		.map((key) => key.slice('update.stage.'.length))
+		.sort();
+	assert.deepEqual(stageKeys, [...Object.keys(exports.UPDATE_STAGES), 'unknown'].sort(), 'every host stage has a localized word in both dictionaries');
+	assert.equal(exports.UPDATE_STAGES.unpack, true, 'an archive the Host refused needs a fresh install, not a retry');
+	assert.equal(exports.UPDATE_STAGES.replace, true, 'and so does a swap that could not be written');
+	assert.equal(exports.UPDATE_STAGES.download, false, 'a failed download is a retry, never a reinstall');
+	assert.equal(exports.UPDATE_STAGES.check, false, 'and so is a failed check');
+
+	// The composed sentences are what a user actually reads, so assert those
+	// and not only the dictionary entries behind them.
+	const t = ctx.locale.bind('notify-sounds');
+	assert.equal(exports.updateAppliedText(t, { from: '1.6.9', to: '1.7.0' }), '更新完成：v1.6.9 → v1.7.0，重启 DSH 后生效', 'the completion line is composed from the dictionary');
+	const failed = exports.updateFailureText(t, { stage: 'unpack', to: '1.7.1' }, '1.7.0');
+	assert.equal(failed.detail, 'v1.7.0 → v1.7.1 · 更新失败（解包），已恢复原状', 'a failure names both versions and the stage in words');
+	assert.ok(failed.advice.includes('github.com/BillCx330/dsh-plugin-notify-sounds'), 'the reinstall advice carries the repository');
+	assert.ok(failed.advice.includes('卸载') && failed.advice.includes('重新安装'), 'and the steps to follow');
+	const network = exports.updateFailureText(t, { stage: 'download' }, '1.7.0');
+	assert.equal(network.detail, '更新失败（下载），已恢复原状', 'an unknown target version is simply left out of the line');
+	assert.ok(network.advice.includes('重试'), 'a download failure is answered with a retry');
+	assert.ok(!network.advice.includes('卸载'), 'and never with an uninstall');
+	assert.equal(exports.updateFailureText(t, {}, '1.7.0').detail, '更新失败（未知阶段），已恢复原状', 'a stage the Host never sends falls back to a word rather than a raw key');
+}
+
+// --- A3 regression: the peak scan visits every sample --------------------------
+// A strided scan aliases against content near fs/8: with a stride of 8, a peak
+// that lands off every 8th index is never seen, the gain comes out too large and
+// the custom sound plays hot. One off-grid sample is enough to tell the two
+// scans apart.
+{
+	const samples = new Float32Array(64).fill(0.01);
+	samples[13] = 0.9;
+	const gain = exports.normalizedGain({ numberOfChannels: 1, getChannelData: () => samples });
+	// `Math.fround`: the buffer holds the Float32 rounding of 0.9, and the gain
+	// is derived from what was actually stored.
+	assert.equal(gain, Math.min(1 / Math.fround(0.9), 4), 'the peak is found off the stride grid');
+	const quiet = new Float32Array(16).fill(0.00001);
+	assert.equal(exports.normalizedGain({ numberOfChannels: 1, getChannelData: () => quiet }), 1, 'a near-silent file is not boosted at all');
+	const loud = new Float32Array(16).fill(2);
+	assert.equal(exports.normalizedGain({ numberOfChannels: 1, getChannelData: () => loud }), 0.5, 'and a loud one is brought down toward full scale');
+}
+
+// --- BUG-1 regression: the daily check chain -----------------------------------
+// The tick returned early when the preference was off, and that return skipped
+// the reschedule after it: turning the switch off once — or merely loading the
+// page with it off — ended the chain for good, while the row went on promising
+// "at most one quiet check a day". Firing the captured first tick is the only
+// way to observe a chain that reschedules itself.
+{
+	form.value.updateAutoCheck = false;
+	const scheduled = longTimers.length;
+	const fetchesBefore = fetchCalls.length;
+	longTimers[0].fn();
+	const asked = fetchCalls.slice(fetchesBefore).filter((call) => call.input.includes('/update/check'));
+	assert.equal(asked.length, 0, 'a tick with the preference off reaches no registry');
+	assert.equal(longTimers.length, scheduled + 1, 'and the next check is still scheduled');
+	assert.equal(longTimers.at(-1).ms, 24 * 60 * 60 * 1000, 'a day out, not a minute');
+	form.value.updateAutoCheck = true;
+}
+
+// --- BUG-2 regression: one page speaks, the others stay silent ------------------
+// Two tabs (or two windows) of the same GUI are two subscribers to the same
+// session facts: without an election, one decision rings twice, raises two
+// system notifications and reminds twice. The election rests on a shared claim,
+// so a stubbed storage is enough to run two real "pages" against each other.
+{
+	const store = new Map();
+	const peers = new Set();
+	globalThis.localStorage = {
+		getItem: (key) => (store.has(key) ? store.get(key) : null),
+		setItem: (key, value) => void store.set(key, String(value)),
+		removeItem: (key) => void store.delete(key),
+	};
+	globalThis.BroadcastChannel = class {
+		constructor() {
+			this.onmessage = null;
+			peers.add(this);
+		}
+		postMessage(data) {
+			for (const peer of peers) if (peer !== this) peer.onmessage?.({ data });
+		}
+		close() {
+			peers.delete(this);
+		}
+	};
+	const first = exports.createAlertLeader();
+	const second = exports.createAlertLeader();
+	assert.equal(first.isLeader(), true, 'the first page takes the role');
+	assert.equal(second.isLeader(), false, 'a second page of the same GUI stays silent');
+	second.refresh();
+	assert.equal(second.isLeader(), false, 'refreshing while the claim is fresh does not steal it');
+	first.dispose();
+	assert.equal(store.has('dsh-notify-sounds:leader'), false, 'a leaving leader releases the claim immediately');
+	assert.equal(second.isLeader(), false, 'the survivor does not claim the role before it looks');
+	second.refresh();
+	assert.equal(second.isLeader(), true, 'and then takes it over');
+	second.dispose();
+	// A holder that died — closed, crashed, frozen — leaves a claim nobody
+	// refreshes, and that is what the next page takes over.
+	store.set('dsh-notify-sounds:leader', JSON.stringify({ id: 'gone', at: Date.now() - 60_000 }));
+	const third = exports.createAlertLeader();
+	assert.equal(third.isLeader(), true, 'a stale claim is taken over rather than silencing every page forever');
+	store.set('dsh-notify-sounds:leader', JSON.stringify({ id: 'someone-else', at: Date.now() }));
+	third.refresh();
+	assert.equal(third.isLeader(), false, 'while a fresh claim by another page is respected');
+	third.dispose();
+	// Without storage — this harness, a hardened browser context — a page leads
+	// itself, which is exactly the behaviour before the election existed.
+	globalThis.localStorage = undefined;
+	globalThis.BroadcastChannel = undefined;
+	assert.equal(exports.createAlertLeader().isLeader(), true, 'a page that cannot coordinate leads itself');
+	store.clear();
+	peers.clear();
+}
+
+// --- BUG-2 end to end: the page that lost the election makes no sound -----------
+// The election above is only half the fix: the other half is that a page which is
+// not the leader stays quiet. The first instance's effects were disposed with the
+// audio checks, so re-applying here puts exactly one page in play — the follower.
+{
+	const store = new Map([['dsh-notify-sounds:leader', JSON.stringify({ id: 'another-page', at: Date.now() })]]);
+	const peers = new Set();
+	globalThis.localStorage = {
+		getItem: (key) => (store.has(key) ? store.get(key) : null),
+		setItem: (key, value) => void store.set(key, String(value)),
+		removeItem: (key) => void store.delete(key),
+	};
+	globalThis.BroadcastChannel = class {
+		constructor() {
+			this.onmessage = null;
+			peers.add(this);
+		}
+		postMessage(data) {
+			for (const peer of peers) if (peer !== this) peer.onmessage?.({ data });
+		}
+		close() {
+			peers.delete(this);
+		}
+	};
+	const disposers = [];
+	exports.apply({
+		...ctx,
+		effect(fn) {
+			const dispose = fn();
+			disposers.push(dispose);
+			return typeof dispose === 'function' ? dispose : () => {};
+		},
+	});
+	form.value = { ...baseValue(), systemNotify: true, decisionSound: 'bell' };
+	document.visibilityState = 'hidden';
+	scheduled.length = 0;
+	notifications.length = 0;
+	publish([['f1', { running: true, pendingInteraction: undefined, completionUnread: false }]]);
+	publish([['f1', { running: true, pendingInteraction: { kind: 'approval', toolName: 'Bash', reason: 'run it' } }]]);
+	assert.equal(scheduled.length, 0, 'the page that lost the election plays no sound');
+	assert.equal(notifications.length, 0, 'and raises no system notification');
+	// Leaving releases nothing here: this page never held the role.
+	for (const dispose of disposers) dispose();
+	assert.equal(store.get('dsh-notify-sounds:leader').includes('another-page'), true, 'and it does not release a claim it never owned');
+	document.visibilityState = 'visible';
+	globalThis.localStorage = undefined;
+	globalThis.BroadcastChannel = undefined;
+	store.clear();
+	peers.clear();
 }
 
 console.log('smoke test: all assertions passed');
