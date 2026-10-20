@@ -105,6 +105,10 @@ const windowNative = (windows) => ({
 		for (const window of windows) if (visit(window.handle) === false) return;
 	},
 	IsWindowVisible: (handle) => windows.find((window) => window.handle === handle).visible,
+	GetWindowPid: (handle, buffer) => {
+		buffer[0] = windows.find((window) => window.handle === handle).pid ?? 0;
+		return 0;
+	},
 	GetWindowTextLengthW: (handle) => windows.find((window) => window.handle === handle).title.length,
 	GetWindowTextW: (handle, buffer) => {
 		const title = windows.find((window) => window.handle === handle).title;
@@ -117,6 +121,8 @@ assert.equal(host.findDesktopWindow(windowNative([
 	{ handle: 7, visible: false, title: '会话 — DeepSeek Harness' },
 	{ handle: 9, visible: true, title: '另一个 — DeepSeek Harness' },
 ])), 9, 'a visible window wins over a hidden one');
+assert.equal(host.findDesktopWindow(windowNative([{ handle: 4, visible: true, title: '', pid: process.ppid }])), 4, 'the shell window is found by its owning process when the title is empty');
+assert.equal(host.findDesktopWindow(windowNative([{ handle: 4, visible: false, title: '', pid: process.ppid }])), 4, 'a hidden shell window is found by process too');
 assert.equal(host.findDesktopWindow(windowNative([{ handle: 7, visible: true, title: '别的窗口' }])), undefined, 'an unrelated window is not the app');
 
 assert.ok(host.isDesktopTitle('DeepSeek Harness'), 'the bare app title matches');
