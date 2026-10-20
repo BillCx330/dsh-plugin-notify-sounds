@@ -98,6 +98,27 @@ assert.throws(() => host.Config({ quietStart: '9:30' }), /regexp/, 'a single-dig
 assert.throws(() => host.Config({ renotifyMinutes: 0 }), />= 1/, 'a zero repeat interval is refused');
 
 // --- Assertions: window-title matching -------------------------------------------
+/** A koffi-like fake exposing the Win32 calls `findDesktopWindow` uses. */
+const windowNative = (windows) => ({
+	koffi: { register: (fn) => fn, unregister: () => {}, pointer: () => ({}) },
+	EnumWindows: (visit) => {
+		for (const window of windows) if (visit(window.handle) === false) return;
+	},
+	IsWindowVisible: (handle) => windows.find((window) => window.handle === handle).visible,
+	GetWindowTextLengthW: (handle) => windows.find((window) => window.handle === handle).title.length,
+	GetWindowTextW: (handle, buffer) => {
+		const title = windows.find((window) => window.handle === handle).title;
+		for (let index = 0; index < title.length; index += 1) buffer[index] = title.charCodeAt(index);
+		return title.length;
+	},
+});
+assert.equal(host.findDesktopWindow(windowNative([{ handle: 7, visible: false, title: '会话 — DeepSeek Harness' }])), 7, 'a window closed to the tray is still found');
+assert.equal(host.findDesktopWindow(windowNative([
+	{ handle: 7, visible: false, title: '会话 — DeepSeek Harness' },
+	{ handle: 9, visible: true, title: '另一个 — DeepSeek Harness' },
+])), 9, 'a visible window wins over a hidden one');
+assert.equal(host.findDesktopWindow(windowNative([{ handle: 7, visible: true, title: '别的窗口' }])), undefined, 'an unrelated window is not the app');
+
 assert.ok(host.isDesktopTitle('DeepSeek Harness'), 'the bare app title matches');
 assert.ok(host.isDesktopTitle('某会话 — DeepSeek Harness'), 'a session title matches (em dash)');
 assert.ok(host.isDesktopTitle('Some Session - DeepSeek Harness'), 'a hyphen variant matches too');
