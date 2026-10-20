@@ -36,7 +36,7 @@ Every visual detail of the settings section comes from DSH's own design system: 
 | **Only what you care about** | Sub-agents (background tasks) are completely silent by default — only your own conversation is announced |
 | **Quiet when it should be** | Quiet hours (e.g. 22:00–08:00, wrapping past midnight), notify-only-when-hidden, and a master switch |
 | **Your sound, your way** | Nine built-in sounds, custom ringtone upload, volume — each feature with its own toggle |
-| **Update checks** | Check npm for a new version and install it in one click: verified against the published digest before anything is replaced, restored on failure with advice you can act on; restart DSH to load it |
+| **Update checks** | Checks npm for a newer version and points at the route that installs it — Settings → Plugins (remove, then add again), the marketplace, or `dsh plugin add` on a web profile; the row also flags an install the profile's lockfile does not match |
 
 ## 💡 Why
 
@@ -54,7 +54,7 @@ Or upload your own ringtone (mp3/wav/ogg, ≤512KB, validated and volume-normali
 
 Settings → **Sounds** (between General and Models). Every feature has its own toggle, styled exactly like DSH's own preference pages:
 
-master switch and volume · per-trigger sounds with preview · sub-agent alerts · system notifications · window title alert · repeat interval · quiet hours · hidden-only mode · custom ringtone upload · update checks and one-click update
+master switch and volume · per-trigger sounds with preview · sub-agent alerts · system notifications · window title alert · repeat interval · quiet hours · hidden-only mode · custom ringtone upload · update checks (installs go through the package manager)
 
 Everything applies immediately — no restart needed.
 
@@ -78,7 +78,7 @@ The "install source" dropdown above the box picks the download mirror (mainland 
 
 **Upgrades are installed by the package manager**, so the profile's lockfile moves with the files — a DSH plugin cannot install its own update durably (the manager refuses a package that is already declared, and its remove-then-install step unloads the very code that would finish the install). The plugin therefore only *checks*, and tells you where to install:
 
-- **Inside DSH (recommended)**: Settings → Plugins → remove this plugin → **Add plugin** → paste `dsh-plugin-notify-sounds` → Install → restart DSH.
+- **Inside DSH (recommended)**: Settings → Plugins → remove this plugin → **Add plugin** → paste `dsh-plugin-notify-sounds@<version>` → Install → restart DSH. (Pin the version: pnpm's `minimumReleaseAge` policy keeps a freshly published version out of automatic resolution for a while, so the bare name can resolve to the previous release.)
 - **With the marketplace plugin** ([dshmarket](https://www.npmjs.com/package/dshmarket)): update it in one click there.
 - **On a `web` profile**: `dsh plugin --profile <your profile> add dsh-plugin-notify-sounds@<version>`.
 
@@ -139,6 +139,7 @@ For anyone hacking on the code (exact details live in the source comments):
 
 ## 📜 Changelog
 
+- **v1.8.5** (2026-10-20) **The wording catches up with the mechanism.** The update row still said a newer version could be installed "in one click" — it cannot since 1.8.0: the row only checks and points at the package manager. The row now says exactly that, and its in-app guidance carries the version (`dsh-plugin-notify-sounds@{version}`) so a fresh release is not silently resolved to the previous one by pnpm's `minimumReleaseAge` policy. The README feature table, settings summary and install step no longer promise one-click installs; historical changelog entries are left untouched.
 - **v1.8.4** (2026-10-20) **A click always finds the window.** A trace of a real click showed the native raise giving up with "no window found" while the window existed: a hidden or repainting window can transiently answer with an empty title, and the search had nothing else to match on. The window search now also matches the process that owns the window (the Desktop shell is this Host's parent), and the foreground request is retried three times before the deep-link fallback is paid for.
 - **v1.8.3** (2026-10-20) **Click-to-return works when the window is closed to the tray.** The Win32 raise searched only *visible* windows, so a DSH window hidden to the tray was never found and the click fell back to the slow deep-link route — which reads as "clicked the notification, nothing happened". The search now also remembers an invisible window whose title matches, and the raise shows it (`SW_SHOW`) before restoring and focusing it; the deep link stays as the last resort.
 - **v1.8.2** (2026-10-20) **Actually fixes goal-mode alerting.** The 1.8.1 host route read `stateOf(session, "goal")` but took `current.phase`, while the projection value nests the goal: `current.goal.phase`. Every read therefore came back empty and every round chimed. The route now reads the nested field (with a fallback for a flattened shape), and a Host-side debug trace confirmed `current.goal.phase` is `active` on intermediate rounds and `complete` on the final one.
