@@ -428,6 +428,29 @@ let statusListeners = [];
 let statusSnapshot = new Map();
 /** Session list rows, filled per test: `origin`/`parentId` classify sub-agents. */
 const sessionRowsById = {};
+/** Goal projection faces for the goal-mode tests: one per session. */
+const goalProjections = new Map();
+const goalFace = (sessionId) => {
+	let entry = goalProjections.get(sessionId);
+	if (entry === undefined) {
+		entry = { snapshot: undefined, listeners: new Set() };
+		goalProjections.set(sessionId, entry);
+	}
+	return {
+		getSnapshot: () => entry.snapshot,
+		subscribe: (listener) => {
+			entry.listeners.add(listener);
+			return () => entry.listeners.delete(listener);
+		},
+	};
+};
+/** Publish one goal phase, the way the real projection store does. */
+const setGoalPhase = (sessionId, phase) => {
+	goalFace(sessionId);
+	const entry = goalProjections.get(sessionId);
+	entry.snapshot = phase === undefined ? undefined : { goal: { phase } };
+	for (const listener of [...entry.listeners]) listener();
+};
 const slotInjections = [];
 const slotRegistrations = [];
 const formWrites = [];
@@ -452,6 +475,7 @@ const baseValue = () => ({
 	quietHours: false,
 	quietStart: '22:00',
 	quietEnd: '08:00',
+	goalFinalOnly: false,
 });
 
 const form = {
@@ -532,6 +556,9 @@ const ctx = {
 		list: {
 			getSnapshot: () => ({ byId: sessionRowsById }),
 		},
+		get: (sessionId) => ({
+			projections: { faceOf: (key) => (key === 'goal' ? goalFace(sessionId) : undefined) },
+		}),
 	},
 	slots: {
 		inject(key, callback) {
@@ -650,11 +677,11 @@ assert.equal(tree.children[0][0].type, 'h2', 'the title is a heading like the sh
 assert.equal(tree.children[0][1].type, 'p', 'the intro is a paragraph');
 assert.equal(tree.children[0][2].type?.name, 'UpdateNotice', 'the update notice sits right under the intro, where the page lands');
 const rows = tree.children[0][3].children[0];
-assert.equal(rows.length, 14, 'fourteen rows render');
+assert.equal(rows.length, 15, 'fifteen rows render');
 assert.deepEqual(
 	rows.map((row) => row.props.key),
-	['enabled', 'volume', 'decision', 'question', 'completion', 'custom', 'subagent', 'systemNotify', 'titleFlash', 'renotify', 'quiet', 'onlyWhenHidden', 'updateAutoCheck', 'update'],
-	'row order: master switch, volume, the three triggers, the custom sound those triggers can pick, then sub-agent scope, notification, title flash, repeat reminder, quiet hours, hidden-only, the auto-check toggle and the update row',
+	['enabled', 'volume', 'decision', 'question', 'completion', 'custom', 'subagent', 'goalFinalOnly', 'systemNotify', 'titleFlash', 'renotify', 'quiet', 'onlyWhenHidden', 'updateAutoCheck', 'update'],
+	'row order: master switch, volume, the three triggers, the custom sound those triggers can pick, then sub-agent scope, goal final-round scope, notification, title flash, repeat reminder, quiet hours, hidden-only, the auto-check toggle and the update row',
 );
 
 // --- Assertions: uncontrolled volume slider ------------------------------------
@@ -775,6 +802,26 @@ scheduled.length = 0;
 publish([['s2', { running: true, pendingInteraction: undefined, completionUnread: false }]]);
 publish([['s2', { running: false, pendingInteraction: undefined, completionUnread: true }]]);
 assert.equal(scheduled.length, 0, 'disabled preference mutes the completion sound');
+	// --- Goal mode: intermediate rounds stay silent, the goal end chimes once ---
+	form.value = { ...baseValue(), goalFinalOnly: true, completionSound: 'arc' };
+	sessionRowsById.s7 = { origin: 'main' };
+	scheduled.length = 0;
+	setGoalPhase('s7', 'active');
+	publish([['s7', { running: true, pendingInteraction: undefined, completionUnread: false }]]);
+	publish([['s7', { running: false, pendingInteraction: undefined, completionUnread: true }]]);
+	assert.equal(scheduled.length, 0, 'an intermediate goal round stays silent');
+	setGoalPhase('s7', 'complete');
+	assert.equal(scheduled.length, 4, 'the end of the goal chimes once');
+	setGoalPhase('s7', 'complete');
+	assert.equal(scheduled.length, 4, 'the goal chime is delivered only once');
+	// A goal that already finished by its last edge chimes immediately.
+	scheduled.length = 0;
+	sessionRowsById.s8 = { origin: 'main' };
+	setGoalPhase('s8', 'complete');
+	publish([['s8', { running: true, pendingInteraction: undefined, completionUnread: false }]]);
+	publish([['s8', { running: false, pendingInteraction: undefined, completionUnread: true }]]);
+	assert.equal(scheduled.length, 4, 'a finished goal chimes on its completion edge');
+	form.value = baseValue();
 
 // --- Assertions: question routing, custom sound, quiet hours --------------------
 // Let every per-kind cooldown lapse so the later triggers fire on merit.
