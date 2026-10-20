@@ -186,8 +186,8 @@ const callGoal = async (req) => {
 	await goalRoute.handler(req, res);
 	return res;
 };
-sessionById.set('goal-active', { id: 'goal-active', projections: { goal: { failure: null, current: { phase: 'active' } } } });
-sessionById.set('goal-done', { id: 'goal-done', projections: { goal: { failure: null, current: { phase: 'complete' } } } });
+sessionById.set('goal-active', { id: 'goal-active', projections: { goal: { failure: null, current: { goal: { phase: 'active' } } } } });
+sessionById.set('goal-done', { id: 'goal-done', projections: { goal: { failure: null, current: { goal: { phase: 'complete' } } } } });
 rejectionFor = () => undefined;
 assert.equal(JSON.parse((await callGoal({ method: 'GET', url: '/notify-sounds/goal?session=goal-active' })).body).phase, 'active', 'an active goal is reported');
 assert.equal(JSON.parse((await callGoal({ method: 'GET', url: '/notify-sounds/goal?session=goal-done' })).body).phase, 'complete', 'a finished goal is reported');
