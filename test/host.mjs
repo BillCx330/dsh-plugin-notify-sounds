@@ -162,7 +162,7 @@ const makeCtx = () => ({
 
 host.apply(makeCtx());
 assert.deepEqual(configureCalls.map((call) => call.options), [{ auto: false }], 'the auto inventory page is suppressed');
-assert.equal(registeredRoutes.length, 3, 'three routes are registered: focus, update check, update apply');
+assert.equal(registeredRoutes.length, 2, 'two routes are registered: focus and update check (1.8.0 removed the self-install route)');
 const route = registeredRoutes.find((entry) => entry.path === host.FOCUS_PATH);
 assert.ok(route, 'the focus route is registered');
 assert.equal(route.kind, 'exact', 'the route is an exact match');
@@ -427,6 +427,51 @@ try {
 	assert.equal(forced.headers['content-type'], 'application/json', 'the answer is JSON');
 	assert.equal(fetchLog.length, 1, 'a forced check reaches the registry');
 	assert.ok(fetchLog[0].url.startsWith('https://registry.npmjs.org/'), 'and only ever talks to a pinned registry');
+// --- Assertions: installation provenance (1.8.0) ---------------------------------
+// A tree installed by the plugin's own pre-1.8.0 updater looks right on disk
+// while the profile's lockfile still pins the old version. The check reports
+// that mismatch so the Settings row can tell the user to install it through
+// the package manager instead of discovering the rollback later.
+{
+	const profileDir = mkdtempSync(join(tmpdir(), 'notify-sounds-profile-'));
+	const installedRoot = mkdtempSync(join(tmpdir(), 'notify-sounds-installed-'));
+	const previousProfileDir = process.env.DSH_PROFILE_DIR;
+	const previousProfileName = process.env.DSH_PROFILE;
+	const restoreEnv = (key, value) => {
+		if (value === undefined) delete process.env[key];
+		else process.env[key] = value;
+	};
+	process.env.DSH_PROFILE_DIR = profileDir;
+	process.env.DSH_PROFILE = 'desktop';
+	try {
+		writeFileSync(join(profileDir, 'pnpm-lock.yaml'), [
+			'dependencies:',
+			'  dsh-plugin-notify-sounds:',
+			'    specifier: ^1.0.0',
+			'    version: 1.0.0',
+			'snapshots:',
+			'  dsh-plugin-notify-sounds@1.0.0: {}',
+			'',
+		].join('\n'));
+		writeFileSync(join(installedRoot, 'package.json'), JSON.stringify({ version: '1.5.0' }));
+		clock += 25 * 60 * 60 * 1000;
+		scripts.push(registrySays('9.9.9'));
+		const provenance = await host.checkForUpdate({ force: true, root: installedRoot });
+		assert.equal(provenance.current, '1.5.0', 'the running tree reports its version');
+		assert.equal(provenance.recorded, '1.0.0', 'the version the lockfile would restore is reported');
+		assert.equal(provenance.unregistered, true, 'a tree the lockfile does not match is marked unregistered');
+		assert.equal(provenance.profile, 'desktop', 'the profile name is mirrored to the row');
+		// The helper is symmetric, and a matching tree is not flagged.
+		assert.equal(host.installationProvenance('1.5.0').unregistered, true, 'the helper flags a mismatch');
+		assert.equal(host.installationProvenance('1.0.0').unregistered, false, 'and clears a matching tree');
+	} finally {
+		restoreEnv('DSH_PROFILE_DIR', previousProfileDir);
+		restoreEnv('DSH_PROFILE', previousProfileName);
+		rmSync(profileDir, { recursive: true, force: true });
+		rmSync(installedRoot, { recursive: true, force: true });
+	}
+}
+
 } finally {
 	globalThis.fetch = realFetch;
 	Date.now = realDateNow;
@@ -848,32 +893,6 @@ try {
 	assert.equal(two, one, 'concurrent checks share one request');
 	assert.equal(applyRequests.length, 1, 'and only one request goes out');
 
-	// The apply route is fenced and serves nothing but POST.
-	const applyRoute = registeredRoutes.find((entry) => entry.path === host.UPDATE_APPLY_PATH);
-	assert.ok(applyRoute, 'the update apply route is registered');
-	assert.equal(applyRoute.kind, 'exact', 'the apply route is an exact match');
-	assert.equal(client.UPDATE_APPLY_PATH, host.UPDATE_APPLY_PATH, 'the apply route path matches between the halves');
-	const callApply = async (req) => {
-		const res = {
-			statusCode: undefined,
-			headers: {},
-			ended: false,
-			setHeader(name, value) {
-				this.headers[name] = value;
-			},
-			end() {
-				this.ended = true;
-			},
-		};
-		await applyRoute.handler(req, res);
-		return res;
-	};
-	rejectionFor = () => 403;
-	assert.equal((await callApply({ method: 'POST', url: '/notify-sounds/update/apply' })).statusCode, 403, 'a fenced apply is refused with 403');
-	rejectionFor = () => undefined;
-	const wrongApplyMethod = await callApply({ method: 'GET', url: '/notify-sounds/update/apply' });
-	assert.equal(wrongApplyMethod.statusCode, 405, 'a non-POST apply is refused with 405');
-	assert.equal(wrongApplyMethod.headers.allow, 'POST', 'the 405 advertises POST');
 
 	// Redirects: followed one hop at a time, and only to trusted hosts. The
 	// mainland mirror serves its tarballs from its CDN — the one legitimate
