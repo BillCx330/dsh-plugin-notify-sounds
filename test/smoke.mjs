@@ -23,8 +23,16 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 let registration;
 // Recording fetch mock: the notification click posts to the Host focus route.
 const fetchCalls = [];
+const goalPhases = new Map();
 globalThis.fetch = (input, init) => {
 	fetchCalls.push({ input: String(input), init });
+	const target = String(input);
+	if (target.startsWith("/notify-sounds/goal")) {
+		const search = target.split("?")[1] ?? "";
+		const sessionId = new URLSearchParams(search).get("session");
+		const phase = goalPhases.get(sessionId) ?? null;
+		return Promise.resolve({ ok: true, json: () => Promise.resolve({ phase }) });
+	}
 	return Promise.resolve({ ok: true });
 };
 globalThis.window = {
@@ -428,29 +436,6 @@ let statusListeners = [];
 let statusSnapshot = new Map();
 /** Session list rows, filled per test: `origin`/`parentId` classify sub-agents. */
 const sessionRowsById = {};
-/** Goal projection faces for the goal-mode tests: one per session. */
-const goalProjections = new Map();
-const goalFace = (sessionId) => {
-	let entry = goalProjections.get(sessionId);
-	if (entry === undefined) {
-		entry = { snapshot: undefined, listeners: new Set() };
-		goalProjections.set(sessionId, entry);
-	}
-	return {
-		getSnapshot: () => entry.snapshot,
-		subscribe: (listener) => {
-			entry.listeners.add(listener);
-			return () => entry.listeners.delete(listener);
-		},
-	};
-};
-/** Publish one goal phase, the way the real projection store does. */
-const setGoalPhase = (sessionId, phase) => {
-	goalFace(sessionId);
-	const entry = goalProjections.get(sessionId);
-	entry.snapshot = phase === undefined ? undefined : { goal: { phase } };
-	for (const listener of [...entry.listeners]) listener();
-};
 const slotInjections = [];
 const slotRegistrations = [];
 const formWrites = [];
@@ -803,24 +788,32 @@ publish([['s2', { running: true, pendingInteraction: undefined, completionUnread
 publish([['s2', { running: false, pendingInteraction: undefined, completionUnread: true }]]);
 assert.equal(scheduled.length, 0, 'disabled preference mutes the completion sound');
 	// --- Goal mode: intermediate rounds stay silent, the goal end chimes once ---
-	form.value = { ...baseValue(), goalFinalOnly: true, completionSound: 'arc' };
-	sessionRowsById.s7 = { origin: 'main' };
-	scheduled.length = 0;
-	setGoalPhase('s7', 'active');
-	publish([['s7', { running: true, pendingInteraction: undefined, completionUnread: false }]]);
-	publish([['s7', { running: false, pendingInteraction: undefined, completionUnread: true }]]);
-	assert.equal(scheduled.length, 0, 'an intermediate goal round stays silent');
-	setGoalPhase('s7', 'complete');
-	assert.equal(scheduled.length, 4, 'the end of the goal chimes once');
-	setGoalPhase('s7', 'complete');
-	assert.equal(scheduled.length, 4, 'the goal chime is delivered only once');
-	// A goal that already finished by its last edge chimes immediately.
-	scheduled.length = 0;
-	sessionRowsById.s8 = { origin: 'main' };
-	setGoalPhase('s8', 'complete');
-	publish([['s8', { running: true, pendingInteraction: undefined, completionUnread: false }]]);
-	publish([['s8', { running: false, pendingInteraction: undefined, completionUnread: true }]]);
-	assert.equal(scheduled.length, 4, 'a finished goal chimes on its completion edge');
+form.value = { ...baseValue(), goalFinalOnly: true, completionSound: 'arc' };
+sessionRowsById.s7 = { origin: 'main' };
+goalPhases.set('s7', 'active');
+scheduled.length = 0;
+publish([['s7', { running: true, pendingInteraction: undefined, completionUnread: false }]]);
+publish([['s7', { running: false, pendingInteraction: undefined, completionUnread: true }]]);
+await new Promise((resolve) => { setTimeout(resolve, 60); });
+assert.equal(scheduled.length, 0, 'an intermediate goal round stays silent');
+goalPhases.set('s7', 'complete');
+await new Promise((resolve) => { setTimeout(resolve, 2200); });
+assert.equal(scheduled.length, 4, 'the end of the goal chimes once');
+scheduled.length = 0;
+sessionRowsById.s8 = { origin: 'main' };
+goalPhases.set('s8', 'complete');
+publish([['s8', { running: true, pendingInteraction: undefined, completionUnread: false }]]);
+publish([['s8', { running: false, pendingInteraction: undefined, completionUnread: true }]]);
+await new Promise((resolve) => { setTimeout(resolve, 80); });
+assert.equal(scheduled.length, 4, 'a finished goal chimes on its completion edge');
+scheduled.length = 0;
+sessionRowsById.s9 = { origin: 'main' };
+publish([['s9', { running: true, pendingInteraction: undefined, completionUnread: false }]]);
+publish([['s9', { running: false, pendingInteraction: undefined, completionUnread: true }]]);
+await new Promise((resolve) => { setTimeout(resolve, 80); });
+assert.equal(scheduled.length, 4, 'a session without a goal chimes as before');
+form.value = baseValue();
+goalPhases.clear();
 	form.value = baseValue();
 
 // --- Assertions: question routing, custom sound, quiet hours --------------------

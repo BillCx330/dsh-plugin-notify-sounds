@@ -130,6 +130,9 @@ assert.equal(host.windowTitle({ GetWindowTextLengthW: () => 0, GetWindowTextW: (
 const configureCalls = [];
 const registeredRoutes = [];
 let rejectionFor = () => undefined;
+/** Sessions the goal-phase route reads, keyed by id. */
+const sessionById = new Map();
+
 const makeCtx = () => ({
 	fiber: {},
 	inject(names, callback) {
@@ -155,6 +158,8 @@ const makeCtx = () => ({
 					return rejectionFor(req);
 				},
 			},
+			sessions: { get: (sessionId) => sessionById.get(sessionId) },
+			sessionProjections: { stateOf: (session, key) => session.projections?.[key] },
 		};
 		callback(child);
 	},
@@ -162,7 +167,35 @@ const makeCtx = () => ({
 
 host.apply(makeCtx());
 assert.deepEqual(configureCalls.map((call) => call.options), [{ auto: false }], 'the auto inventory page is suppressed');
-assert.equal(registeredRoutes.length, 2, 'two routes are registered: focus and update check (1.8.0 removed the self-install route)');
+assert.equal(registeredRoutes.length, 3, 'three routes are registered: focus, update check and the goal phase read');
+const goalRoute = registeredRoutes.find((entry) => entry.path === host.GOAL_PHASE_PATH);
+assert.ok(goalRoute, 'the goal phase route is registered');
+assert.equal(goalRoute.kind, 'exact', 'the goal phase route is an exact match');
+const callGoal = async (req) => {
+	const res = {
+		statusCode: undefined,
+		headers: {},
+		body: undefined,
+		setHeader(name, value) {
+			this.headers[name] = value;
+		},
+		end(body) {
+			this.body = body;
+		},
+	};
+	await goalRoute.handler(req, res);
+	return res;
+};
+sessionById.set('goal-active', { id: 'goal-active', projections: { goal: { failure: null, current: { phase: 'active' } } } });
+sessionById.set('goal-done', { id: 'goal-done', projections: { goal: { failure: null, current: { phase: 'complete' } } } });
+rejectionFor = () => undefined;
+assert.equal(JSON.parse((await callGoal({ method: 'GET', url: '/notify-sounds/goal?session=goal-active' })).body).phase, 'active', 'an active goal is reported');
+assert.equal(JSON.parse((await callGoal({ method: 'GET', url: '/notify-sounds/goal?session=goal-done' })).body).phase, 'complete', 'a finished goal is reported');
+assert.equal(JSON.parse((await callGoal({ method: 'GET', url: '/notify-sounds/goal?session=missing' })).body).phase, null, 'an unknown session reports no goal');
+assert.equal((await callGoal({ method: 'POST', url: '/notify-sounds/goal?session=goal-active' })).statusCode, 405, 'a non-GET goal read is refused');
+rejectionFor = () => 401;
+assert.equal((await callGoal({ method: 'GET', url: '/notify-sounds/goal?session=goal-active' })).statusCode, 401, 'the goal route carries the connection fence');
+rejectionFor = () => undefined;
 const route = registeredRoutes.find((entry) => entry.path === host.FOCUS_PATH);
 assert.ok(route, 'the focus route is registered');
 assert.equal(route.kind, 'exact', 'the route is an exact match');
