@@ -95,7 +95,7 @@ dsh plugin --profile <your profile> add github:BillCx330/dsh-plugin-notify-sound
 **Release archive** — download the `.tgz` from [Releases](https://github.com/BillCx330/dsh-plugin-notify-sounds/releases) and install it by its **path on disk**:
 
 ```sh
-dsh plugin --profile <your profile> add ./dsh-plugin-notify-sounds-1.8.0.tgz
+dsh plugin --profile <your profile> add ./dsh-plugin-notify-sounds-1.8.4.tgz
 ```
 
 (`dsh plugin add` hands its argument straight to the package manager, so it takes a local file path — a download URL will not work.)

@@ -95,7 +95,7 @@ dsh plugin --profile <你的 profile> add github:BillCx330/dsh-plugin-notify-sou
 **Release 压缩包** —— 从 [Releases](https://github.com/BillCx330/dsh-plugin-notify-sounds/releases) 下载 `.tgz`，用它**在磁盘上的路径**安装：
 
 ```sh
-dsh plugin --profile <你的 profile> add ./dsh-plugin-notify-sounds-1.8.0.tgz
+dsh plugin --profile <你的 profile> add ./dsh-plugin-notify-sounds-1.8.4.tgz
 ```
 
 （`dsh plugin add` 把参数原样交给包管理器，所以要给本地文件路径，不能填下载地址。）
