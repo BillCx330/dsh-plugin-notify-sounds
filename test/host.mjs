@@ -24,10 +24,10 @@
  */
 
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import * as host from '../lib/index.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -564,6 +564,48 @@ try {
 	}
 }
 
+// The Host does not run with DSH_PROFILE_DIR — that variable is injected into
+// the model's shell calls, not into this process (measured on 0.2.1-rc.2). So
+// the profile has to be found on disk, or the "this install is not registered"
+// prompt — the one that turns a self-update into a permanent one — never
+// appears at all.
+{
+	const root = mkdtempSync(join(tmpdir(), 'notify-sounds-layout-'));
+	const profile = join(root, 'profiles', 'desktop');
+	const installed = join(profile, 'node_modules', 'dsh-plugin-notify-sounds');
+	mkdirSync(join(installed, 'lib'), { recursive: true });
+	writeFileSync(join(installed, 'lib', 'index.js'), '');
+	writeFileSync(join(profile, 'pnpm-lock.yaml'), 'snapshots:\n  dsh-plugin-notify-sounds@1.0.0: {}\n');
+	const elsewhere = join(root, 'profiles', 'bundle', 'node_modules', 'other', 'lib');
+	mkdirSync(elsewhere, { recursive: true });
+	writeFileSync(join(elsewhere, 'index.js'), '');
+	const previousProfileDir = process.env.DSH_PROFILE_DIR;
+	const previousProfileName = process.env.DSH_PROFILE;
+	delete process.env.DSH_PROFILE_DIR;
+	delete process.env.DSH_PROFILE;
+	try {
+		assert.equal(
+			host.profileDirectory(pathToFileURL(join(installed, 'lib', 'index.js')).href),
+			profile,
+			'the profile is found by walking up to the nearest pnpm-lock.yaml',
+		);
+		assert.equal(
+			host.profileDirectory(pathToFileURL(join(elsewhere, 'index.js')).href),
+			undefined,
+			'a tree with no lockfile above it reports no profile',
+		);
+		process.env.DSH_PROFILE_DIR = profile;
+		assert.equal(host.profileDirectory(pathToFileURL(join(elsewhere, 'index.js')).href), profile, 'the environment wins when it is set');
+		assert.equal(host.installationProvenance('1.0.0').profile, 'desktop', 'the profile name falls back to the directory name');
+	} finally {
+		if (previousProfileDir === undefined) delete process.env.DSH_PROFILE_DIR;
+		else process.env.DSH_PROFILE_DIR = previousProfileDir;
+		if (previousProfileName === undefined) delete process.env.DSH_PROFILE;
+		else process.env.DSH_PROFILE = previousProfileName;
+		rmSync(root, { recursive: true, force: true });
+	}
+}
+
 } finally {
 	globalThis.fetch = realFetch;
 	Date.now = realDateNow;
@@ -584,4 +626,24 @@ const ownManifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
 for (const name of [...ownManifest.files, 'package.json', 'README.md', 'LICENSE']) {
 	assert.ok(V169_WHITELIST.includes(name), `"${name}" must stay inside the 1.6.9 whitelist, or installs older than 1.7.0 cannot update to this release`);
 }
+
+// --- Release hygiene: the version in the README is the version being shipped ---
+// Every install instruction in the READMEs is copy-pasted by a human, and a
+// stale one does not look wrong — it installs last week's release. Two of them
+// are the first thing a new user reads. Bumping `package.json` and forgetting
+// these is the single easiest mistake to make at release time, so the test
+// suite refuses it instead of a checklist reminding anyone.
+const readmeVersion = (filename) => {
+	const text = readFileSync(join(root, filename), 'utf8');
+	// The quick-install code block, then the release-archive example.
+	const pinned = /dsh-plugin-notify-sounds@(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)/.exec(text);
+	const archive = new RegExp(`dsh-plugin-notify-sounds-(\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?)\\.tgz`).exec(text);
+	return { pinned: pinned?.[1], archive: archive?.[1] };
+};
+for (const filename of ['README.md', 'README.zh.md']) {
+	const found = readmeVersion(filename);
+	assert.equal(found.pinned, ownManifest.version, `${filename}: the quick-install command must name ${ownManifest.version}`);
+	assert.equal(found.archive, ownManifest.version, `${filename}: the release-archive example must name ${ownManifest.version}`);
+}
+
 console.log('host test: all assertions passed');

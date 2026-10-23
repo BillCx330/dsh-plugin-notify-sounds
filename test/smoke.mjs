@@ -1410,6 +1410,19 @@ assert.equal(fetchCalls[0].init.method, 'GET', 'the check is a GET');
 	assert.ok(filled.includes('dsh-plugin-notify-sounds@1.8.6'), 'the rendered command carries a bare version');
 	assert.ok(!filled.includes('@v1.8.6'), 'and never the display prefix');
 	assert.ok(filled.includes('重启 DSH'), 'and still ends with the restart step');
+
+	// The install instruction has exactly two triggers. The second one is the
+	// whole point of the "unregistered" prompt: a tree that updated itself in
+	// place has the new files and the old lockfile record, so the row has to
+	// tell it what to reinstall — pointing at steps it never renders was the
+	// bug this pins down.
+	assert.equal(exports.installTargetVersion({ updateAvailable: true, latest: '9.9.9', current: '1.8.6' }, true), '9.9.9', 'a newer version is the install target');
+	assert.equal(exports.installTargetVersion({ updateAvailable: false, unregistered: true, current: '1.8.6' }, true), '1.8.6', 'an unregistered install re-installs the version already on disk');
+	assert.equal(exports.installTargetVersion({ updateAvailable: true, latest: '9.9.9', unregistered: true, current: '1.8.6' }, true), '9.9.9', 'and the newer version wins when both apply');
+	assert.equal(exports.installTargetVersion({ updateAvailable: false, unregistered: false, current: '1.8.6' }, true), undefined, 'a plain up-to-date install shows no install steps');
+	assert.equal(exports.installTargetVersion({ ok: false, current: undefined }, false), undefined, 'a failed check with no current version has nothing to name');
+	assert.equal(exports.installTargetVersion({ unregistered: true, current: undefined }, false), undefined, 'and neither does an unregistered install with no readable version');
+	assert.equal(exports.installTargetVersion(undefined, false), undefined, 'nothing is named before an answer arrives');
 }
 
 // --- A3 regression: the peak scan visits every sample --------------------------
