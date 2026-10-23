@@ -13,10 +13,10 @@ English | [中文](README.zh.md)
 
 Walk away from the window without missing anything: an OS notification in the background (**click it to jump back**), and a "Waiting for you" / "Finished" mark on the taskbar title. Once you have seen it, the plugin goes quiet — it will not nag you like an alarm clock.
 
-**Install**: DSH → Settings → Plugins → Add plugin, paste the line below and press **Install**:
+**Install**: DSH → **Plugins** in the left sidebar → Add plugin, paste the line below (keep the version — a release younger than 24 hours is resolved back to the previous one by pnpm's `minimumReleaseAge`) and press **Install**:
 
 ```
-dsh-plugin-notify-sounds
+dsh-plugin-notify-sounds@1.8.6
 ```
 
 ---
@@ -36,7 +36,7 @@ Every visual detail of the settings section comes from DSH's own design system: 
 | **Only what you care about** | Sub-agents (background tasks) are completely silent by default — only your own conversation is announced |
 | **Quiet when it should be** | Quiet hours (e.g. 22:00–08:00, wrapping past midnight), notify-only-when-hidden, and a master switch |
 | **Your sound, your way** | Nine built-in sounds, custom ringtone upload, volume — each feature with its own toggle |
-| **Update checks** | Checks npm for a newer version and points at the route that installs it — Settings → Plugins (remove, then add again), the marketplace, or `dsh plugin add` on a web profile; the row also flags an install the profile's lockfile does not match |
+| **Update checks** | Checks npm for a newer version and points at the route that installs it — the **Plugins** panel in the sidebar (uninstall, then add again), the marketplace, or `dsh plugin add` on a web profile; the row also flags an install the profile's lockfile does not match |
 
 ## 💡 Why
 
@@ -62,14 +62,15 @@ Everything applies immediately — no restart needed.
 
 ### 🖱️ Simplest: two clicks inside DSH (recommended)
 
-1. In DSH open **Settings → Plugins** and press **Add plugin**;
-2. Paste the package name into the box (this plugin is published on [npm](https://www.npmjs.com/package/dsh-plugin-notify-sounds)):
+1. In DSH open the **Plugins** panel in the left sidebar and press **Add plugin**;
+2. Paste the package name **with a version** (this plugin is published on [npm](https://www.npmjs.com/package/dsh-plugin-notify-sounds)):
 
    ```
-   dsh-plugin-notify-sounds
+   dsh-plugin-notify-sounds@1.8.6
    ```
 
-   (the GitHub repository address `https://github.com/BillCx330/dsh-plugin-notify-sounds` or a local directory path work too)
+   Do not drop the version: pnpm's `minimumReleaseAge` policy keeps a release younger than 24 hours out of automatic resolution, so the bare name resolves to the previous one. The current version is on [npm](https://www.npmjs.com/package/dsh-plugin-notify-sounds?activeTab=versions) and in [Releases](https://github.com/BillCx330/dsh-plugin-notify-sounds/releases).
+   (The GitHub repository address `https://github.com/BillCx330/dsh-plugin-notify-sounds` or a local directory path work too, but neither pins a version.)
 3. Press **Install**, then **restart DSH** once.
 
 The "install source" dropdown above the box picks the download mirror (mainland China mirror by default; leave it alone unless downloads are slow). DSH warns that a plugin runs with your permissions — this one only reads session state and plays sounds locally; its single request goes to **your own DSH** to raise the window when you click a notification, and nothing is sent anywhere else.
@@ -78,7 +79,7 @@ The "install source" dropdown above the box picks the download mirror (mainland 
 
 **Upgrades are installed by the package manager**, so the profile's lockfile moves with the files — a DSH plugin cannot install its own update durably (the manager refuses a package that is already declared, and its remove-then-install step unloads the very code that would finish the install). The plugin therefore only *checks*, and tells you where to install:
 
-- **Inside DSH (recommended)**: Settings → Plugins → remove this plugin → **Add plugin** → paste `dsh-plugin-notify-sounds@<version>` → Install → restart DSH. (Pin the version: pnpm's `minimumReleaseAge` policy keeps a freshly published version out of automatic resolution for a while, so the bare name can resolve to the previous release.)
+- **Inside DSH (recommended, and the only path verified on the Desktop)**: **Plugins** in the left sidebar → uninstall this plugin under *Installed plugins* → **Add plugin** → paste `dsh-plugin-notify-sounds@<version>` → Install → restart DSH. (Keep the version: pnpm's `minimumReleaseAge` policy keeps a freshly published version out of automatic resolution for its first 24 hours, so the bare name can resolve to the previous release.)
 - **With the marketplace plugin** ([dshmarket](https://www.npmjs.com/package/dshmarket)): update it in one click there.
 - **On a `web` profile**: `dsh plugin --profile <your profile> add dsh-plugin-notify-sounds@<version>`.
 
@@ -92,10 +93,12 @@ The update row also warns when the running version is not what the profile's loc
 dsh plugin --profile <your profile> add github:BillCx330/dsh-plugin-notify-sounds
 ```
 
+(A Git install follows the repository's default branch and pins no version; use `package@version` above when the install has to be reproducible.)
+
 **Release archive** — download the `.tgz` from [Releases](https://github.com/BillCx330/dsh-plugin-notify-sounds/releases) and install it by its **path on disk**:
 
 ```sh
-dsh plugin --profile <your profile> add ./dsh-plugin-notify-sounds-1.8.4.tgz
+dsh plugin --profile <your profile> add ./dsh-plugin-notify-sounds-1.8.6.tgz
 ```
 
 (`dsh plugin add` hands its argument straight to the package manager, so it takes a local file path — a download URL will not work.)
@@ -113,9 +116,9 @@ The command line writes `dsh.profile.bundles` and installs the dependency for yo
 ## ⚠️ Known limitations
 
 - **Hand-edited config**: preferences live in the profile's `cordis.patch.yml`; values must match the schema (volume 0–100, a preset id, `HH:MM` times) or the plugin declines to load — just fix the value. The settings UI only ever writes valid values.
-- **Upgrades are installed by the package manager, not by the plugin**: 1.8.0 removed the self-installer (writing files in place never updated the profile's lockfile, so the next plugin install silently restored the old version). The update row still checks npm and reports a newer version, then points at the route that installs — Settings → Plugins (remove, then add again), the marketplace, or `dsh plugin add` on a web profile.
+- **Upgrades are installed by the package manager, not by the plugin**: 1.8.0 removed the self-installer (writing files in place never updated the profile's lockfile, so the next plugin install silently restored the old version). The update row still checks npm and reports a newer version, then points at the route that installs — the **Plugins** panel in the sidebar (uninstall, then add again), the marketplace, or `dsh plugin add` on a web profile.
 - **Versions up to 1.7.0** reach 1.8.0 through their own updater (1.8.0 keeps the same seven filenames), but that arrival is not registered with pnpm: reinstall once through the package manager as above and every later upgrade stays in place. Versions up to 1.6.9 cannot install a release that adds a file — their fixed whitelist refuses it safely; the same one-time reinstall fixes that too.
-- **Multiple windows** fire independently: the same event may chime once per window; turn on notify-only-when-hidden to avoid it.
+- **Multiple windows** elect one page to speak (since 1.7.0): sounds, system notifications and repeat reminders therefore fire once for the whole GUI, not once per window. Title marks stay per-window, because each window has its own title. If the speaking page closes or crashes, another takes over within seconds.
 - **Click-to-return** is fully implemented and tested on Windows; macOS / Linux fall back to the system deep link and are unverified.
 - **The window is found by its title** — deliberately without inspecting other processes (that trips security software). If DSH ever changes its title format, click-to-return silently stops working; sounds and notifications are unaffected.
 - **The nav glyph** depends on the settings panel's DOM structure and silently falls back to the official gear after a DSH redesign — cosmetic only.
@@ -139,6 +142,7 @@ For anyone hacking on the code (exact details live in the source comments):
 
 ## 📜 Changelog
 
+- **v1.8.6** (2026-10-23) **A full audit, paid off — no new features.** Fixed: with goal-only alerting on, turning the switch **off** while the watcher waited still produced the chime it was holding at the end of the goal (the watcher now re-reads the preference); the update check cached a FAILURE for the full day, so one network blip left the row reading "check failed" until tomorrow (failures are now cached for a minute, and the row no longer blames the network — it says neither source returned a usable answer); a `pnpm-lock.yaml` key carrying a peer suffix (`pkg@1.8.4(@scope/peer@3.18.4)`) was read as a version, which flagged a perfectly good install as unregistered and told the user to reinstall it; an unreadable current version rendered as "This version ? · Up to date", which is now its own message; the repeat-interval control displayed a hand-edited 7 as "5 min" while reminders fired every seven (display and timer now share one snap); identical quiet-hours bounds were silently treated as "no quiet" and the description now says so; the client's time parser accepted `9:05` while the Host schema rejected it (both are strict now); a custom-sound read failure was reported as "could not decode"; and one refused notification construction left the row permanently "unsupported" (a successful one now clears it). **Update guidance**: on the Desktop the plugin manager is a **sidebar panel named Plugins**, not "Settings → Plugins" — 1.8.5 got that wrong; every install command now pins the version (it rendered as `@v1.8.5`, and the display prefix does not belong in a command a package manager parses), and the copy explains that a release younger than pnpm's `minimumReleaseAge` window resolves back to the previous one. **Cleanup**: removed the 527-line unreachable self-installer from 1.8.0 (the Host file drops from 1553 to 1023 lines, along with 10 imports that existed only for it), the update notice that could never render, eight dead dictionary keys, and the tests that pinned the dead code; all three route paths are now cross-checked between the halves (`/notify-sounds/goal` was missing, and it is the one that has already drifted once). The README's "multiple windows fire independently" claim contradicted the speaking-page election shipped in 1.7.0 and is corrected.
 - **v1.8.5** (2026-10-20) **The wording catches up with the mechanism.** The update row still said a newer version could be installed "in one click" — it cannot since 1.8.0: the row only checks and points at the package manager. The row now says exactly that, and its in-app guidance carries the version (`dsh-plugin-notify-sounds@{version}`) so a fresh release is not silently resolved to the previous one by pnpm's `minimumReleaseAge` policy. The README feature table, settings summary and install step no longer promise one-click installs; historical changelog entries are left untouched.
 - **v1.8.4** (2026-10-20) **A click always finds the window.** A trace of a real click showed the native raise giving up with "no window found" while the window existed: a hidden or repainting window can transiently answer with an empty title, and the search had nothing else to match on. The window search now also matches the process that owns the window (the Desktop shell is this Host's parent), and the foreground request is retried three times before the deep-link fallback is paid for.
 - **v1.8.3** (2026-10-20) **Click-to-return works when the window is closed to the tray.** The Win32 raise searched only *visible* windows, so a DSH window hidden to the tray was never found and the click fell back to the slow deep-link route — which reads as "clicked the notification, nothing happened". The search now also remembers an invisible window whose title matches, and the raise shows it (`SW_SHOW`) before restoring and focusing it; the deep link stays as the last resort.

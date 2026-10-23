@@ -657,11 +657,10 @@ const tree = renderTree(
 );
 flushEffects();
 assert.equal(tree.type, 'div');
-assert.equal(tree.children[0].length, 4, 'title, intro, the update notice, rows');
+assert.equal(tree.children[0].length, 3, 'title, intro, rows');
 assert.equal(tree.children[0][0].type, 'h2', 'the title is a heading like the shipped sections');
 assert.equal(tree.children[0][1].type, 'p', 'the intro is a paragraph');
-assert.equal(tree.children[0][2].type?.name, 'UpdateNotice', 'the update notice sits right under the intro, where the page lands');
-const rows = tree.children[0][3].children[0];
+const rows = tree.children[0][2].children[0];
 assert.equal(rows.length, 15, 'fifteen rows render');
 assert.deepEqual(
 	rows.map((row) => row.props.key),
@@ -744,6 +743,17 @@ assert.equal(scheduled.length, 0, 'a zero volume stays silent');
 assert.equal(statusListeners.length, 1, 'one status subscription');
 assert.ok(renotifyChecker, 'the repeat-reminder checker registered its timer');
 
+// The row and the timer must agree on the interval. Snapping only for DISPLAY
+// is what made the control read "5 min" while reminders fired every seven: the
+// stored value is any whole minute 1-60, the control offers four.
+assert.equal(exports.renotifyInterval(5), 5, 'an offered interval is kept as-is');
+assert.equal(exports.renotifyInterval(1), 1, 'so is the shortest one');
+assert.equal(exports.renotifyInterval(30), 30, 'and the longest one');
+assert.equal(exports.renotifyInterval(7), 5, 'a hand-edited 7 snaps to the nearest offered interval, which the timer also uses');
+assert.equal(exports.renotifyInterval(28), 30, 'rounding goes to the nearer neighbour');
+assert.equal(exports.renotifyInterval(undefined), 5, 'a missing value falls back to five minutes');
+assert.equal(exports.renotifyInterval(Number.NaN), 5, 'and so does a non-numeric one');
+
 /** Publish one status snapshot and run the watcher. */
 const publish = (rows) => {
 	statusSnapshot = new Map(rows);
@@ -787,7 +797,7 @@ scheduled.length = 0;
 publish([['s2', { running: true, pendingInteraction: undefined, completionUnread: false }]]);
 publish([['s2', { running: false, pendingInteraction: undefined, completionUnread: true }]]);
 assert.equal(scheduled.length, 0, 'disabled preference mutes the completion sound');
-	// --- Goal mode: intermediate rounds stay silent, the goal end chimes once ---
+// --- Goal mode: intermediate rounds stay silent, the goal end chimes once ---
 form.value = { ...baseValue(), goalFinalOnly: true, completionSound: 'arc' };
 sessionRowsById.s7 = { origin: 'main' };
 goalPhases.set('s7', 'active');
@@ -812,9 +822,24 @@ publish([['s9', { running: true, pendingInteraction: undefined, completionUnread
 publish([['s9', { running: false, pendingInteraction: undefined, completionUnread: true }]]);
 await new Promise((resolve) => { setTimeout(resolve, 80); });
 assert.equal(scheduled.length, 4, 'a session without a goal chimes as before');
+scheduled.length = 0;
+sessionRowsById.s10 = { origin: 'main' };
+form.value = { ...baseValue(), goalFinalOnly: true, completionSound: 'arc' };
+goalPhases.set('s10', 'active');
+publish([['s10', { running: true, pendingInteraction: undefined, completionUnread: false }]]);
+publish([['s10', { running: false, pendingInteraction: undefined, completionUnread: true }]]);
+await new Promise((resolve) => { setTimeout(resolve, 60); });
+// The user turns the switch OFF while the watcher waits. That is the whole
+// reason they turned it off: they do not want the chime it is holding. The
+// wait was commissioned by the preference, so withdrawing the preference
+// withdraws the commission — the next completion edge, with the switch off,
+// alerts normally.
+form.value = { ...baseValue(), goalFinalOnly: false, completionSound: 'arc' };
+goalPhases.set('s10', 'complete');
+await new Promise((resolve) => { setTimeout(resolve, 2200); });
+assert.equal(scheduled.length, 0, 'switching goal-only off mid-wait cancels the chime it was waiting to make');
 form.value = baseValue();
 goalPhases.clear();
-	form.value = baseValue();
 
 // --- Assertions: question routing, custom sound, quiet hours --------------------
 // Let every per-kind cooldown lapse so the later triggers fire on merit.
@@ -1164,7 +1189,7 @@ const getCustomRow = () => {
 	// choice that has already changed once (the custom sound moved up to sit
 	// with the three triggers), and a positional index silently grabs whatever
 	// row happens to land there.
-	return currentTree.children[0][3].children[0].find((row) => row.props.key === 'custom');
+	return currentTree.children[0][2].children[0].find((row) => row.props.key === 'custom');
 };
 const realRemoveFormSet = form.set;
 form.set = (field, value) => field === 'customSoundName'
@@ -1333,46 +1358,58 @@ assert.equal(fetchCalls[0].init.method, 'GET', 'the check is a GET');
 	assert.equal(resumeCalls, beforeDispose, 'the unlock listener is removed after the effect is disposed');
 }
 
-// --- The update copy: composed messages, not concatenated fragments -------------
-// The English row used to render "Updated：v1.6.8 → v1.6.9，restart DSH to load
-// it": the punctuation was baked into the JSX, so the English UI inherited
-// full-width stops from the Chinese sentence. The composed messages live in the
-// dictionaries now, which makes both halves of that checkable.
+// --- The update copy: one command shape, one destination -----------------------
+// A user's only contact with the updater is this row, and every install
+// instruction in it gets pasted into a package manager. These assertions pin
+// the two things that were already wrong once: the destination (the desktop
+// plugin manager is a SIDEBAR panel, not a Settings page) and the version pin
+// (a release younger than pnpm's `minimumReleaseAge` window resolves back to
+// the previous one when the command names only the package).
 {
 	const dict = localeRegistrations[0].dicts;
-	assert.ok(dict.zh['update.doneDetail'].includes('{from}') && dict.zh['update.doneDetail'].includes('{to}'), 'the completion line takes both versions');
-	assert.ok(dict.zh['update.reinstall'].includes('{url}') && dict.en['update.reinstall'].includes('{url}'), 'the reinstall advice carries the repository');
-	assert.ok(dict.zh['update.retry'].includes('{url}') && dict.en['update.retry'].includes('{url}'), 'and so does the retry advice');
 	const fullWidthStop = /[：，。；！？（）]/;
 	for (const [key, value] of Object.entries(dict.en)) {
 		assert.ok(!fullWidthStop.test(String(value)), `the English copy for "${key}" carries no full-width punctuation`);
 	}
-	// The advice is keyed off the stage the Host names, so every stage it can
-	// report needs a localized word — otherwise a failure would print the raw
-	// internal name, which is what the row used to do.
-	const stageKeys = Object.keys(dict.zh)
-		.filter((key) => key.startsWith('update.stage.'))
-		.map((key) => key.slice('update.stage.'.length))
-		.sort();
-	assert.deepEqual(stageKeys, [...Object.keys(exports.UPDATE_STAGES), 'unknown'].sort(), 'every host stage has a localized word in both dictionaries');
-	assert.equal(exports.UPDATE_STAGES.unpack, true, 'an archive the Host refused needs a fresh install, not a retry');
-	assert.equal(exports.UPDATE_STAGES.replace, true, 'and so does a swap that could not be written');
-	assert.equal(exports.UPDATE_STAGES.download, false, 'a failed download is a retry, never a reinstall');
-	assert.equal(exports.UPDATE_STAGES.check, false, 'and so is a failed check');
+	// Both locales, every route, one pinned specifier.
+	for (const locale of ['zh', 'en']) {
+		for (const key of ['update.desktopGuidance', 'update.webGuidance', 'update.webGuidancePlain']) {
+			assert.ok(dict[locale][key].includes('dsh-plugin-notify-sounds@{version}'), `${locale} ${key} pins the version`);
+		}
+	}
+	// The desktop destination is the sidebar panel titled 插件. There is no
+	// "Settings → Plugins" page: the plugin manager registers a
+	// `sidebar.panellist` entry, and Settings only hosts the built-in list.
+	for (const locale of ['zh', 'en']) {
+		assert.ok(!dict[locale]['update.desktopGuidance'].includes('设置 → 插件'), `${locale} does not send desktop users to a Settings page`);
+		assert.ok(!dict[locale]['update.desktopGuidance'].includes('Settings → Plugins'), `${locale} does not send desktop users to a Settings page`);
+	}
+	assert.ok(dict.zh['update.desktopGuidance'].includes('左侧栏「插件」'), 'the Chinese guidance names the sidebar panel');
+	assert.ok(dict.zh['update.desktopGuidance'].includes('添加插件'), 'and the button to press once there');
+	assert.ok(dict.zh['update.versionPinned'].includes('24 小时'), 'a separate line explains why the version has to be pinned');
+	assert.ok(dict.en['update.versionPinned'].includes('24 hours'), 'in English too');
 
-	// The composed sentences are what a user actually reads, so assert those
-	// and not only the dictionary entries behind them.
+	// The self-installer's copy is gone, not merely unreferenced. A dead key is
+	// how the last round of dead UI stayed alive: nothing failed, so nothing
+	// was deleted.
+	const dead = ['update.apply', 'update.updating', 'update.doneDetail', 'update.applyFailed', 'update.retry', 'update.reinstall'];
+	for (const key of dead) {
+		assert.equal(dict.zh[key], undefined, `"${key}" no longer exists in zh`);
+		assert.equal(dict.en[key], undefined, `"${key}" no longer exists in en`);
+	}
+	assert.ok(!Object.keys(dict.zh).some((key) => key.startsWith('update.stage.')), 'no stage words survive the installer that described them');
+
+	// The failures the row can actually describe now.
+	for (const key of ['update.failedDetail', 'update.currentUnknown', 'update.webGuidancePlain', 'custom.unreadable']) {
+		assert.ok(typeof dict.zh[key] === 'string' && typeof dict.en[key] === 'string', `"${key}" exists in both dictionaries`);
+	}
+
+	// What the user reads, substituted exactly the way the row substitutes it.
 	const t = ctx.locale.bind('notify-sounds');
-	assert.equal(exports.updateAppliedText(t, { from: '1.6.9', to: '1.7.0' }), '更新完成：v1.6.9 → v1.7.0，重启 DSH 后生效', 'the completion line is composed from the dictionary');
-	const failed = exports.updateFailureText(t, { stage: 'unpack', to: '1.7.1' }, '1.7.0');
-	assert.equal(failed.detail, 'v1.7.0 → v1.7.1 · 更新失败（解包），已恢复原状', 'a failure names both versions and the stage in words');
-	assert.ok(failed.advice.includes('github.com/BillCx330/dsh-plugin-notify-sounds'), 'the reinstall advice carries the repository');
-	assert.ok(failed.advice.includes('卸载') && failed.advice.includes('重新安装'), 'and the steps to follow');
-	const network = exports.updateFailureText(t, { stage: 'download' }, '1.7.0');
-	assert.equal(network.detail, '更新失败（下载），已恢复原状', 'an unknown target version is simply left out of the line');
-	assert.ok(network.advice.includes('重试'), 'a download failure is answered with a retry');
-	assert.ok(!network.advice.includes('卸载'), 'and never with an uninstall');
-	assert.equal(exports.updateFailureText(t, {}, '1.7.0').detail, '更新失败（未知阶段），已恢复原状', 'a stage the Host never sends falls back to a word rather than a raw key');
+	const filled = t('update.desktopGuidance', { version: '1.8.6' });
+	assert.ok(filled.includes('dsh-plugin-notify-sounds@1.8.6'), 'the rendered command carries a bare version');
+	assert.ok(!filled.includes('@v1.8.6'), 'and never the display prefix');
+	assert.ok(filled.includes('重启 DSH'), 'and still ends with the restart step');
 }
 
 // --- A3 regression: the peak scan visits every sample --------------------------
