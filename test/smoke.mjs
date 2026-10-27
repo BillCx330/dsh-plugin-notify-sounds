@@ -1206,6 +1206,20 @@ const customEntry = filledItems.find((element) => element.props['data-menu-item'
 assert.ok(customEntry, 'the clip is offered by slot id');
 assert.equal(customEntry.children[0], 'ring', 'and labelled with the name the user can change');
 
+// The closed trigger reads its text from the same list. A clip has no
+// `sound.<id>` dictionary entry, so looking it up by id printed the raw key.
+const triggerLabels = (treeNode) => {
+	const labels = [];
+	walkElements(treeNode, (element) => {
+		if (element.type === 'Button' && element.props?.['aria-haspopup'] === 'menu') labels.push(element.children[0]);
+	});
+	return labels;
+};
+assert.ok(!triggerLabels(filledTree).some((label) => /^sound\.custom[123]$/.test(label)), 'no trigger prints a raw key for a clip slot');
+form.value = { ...form.value, decisionSound: 'custom1' };
+const chosenTree = renderSection();
+assert.equal(triggerLabels(chosenTree)[0], 'ring', 'a trigger on a clip shows the clip name, not its id');
+
 // A trigger choosing it plays the stored file.
 form.value = { ...form.value, decisionSound: 'custom1' };
 scheduled.length = 0;
