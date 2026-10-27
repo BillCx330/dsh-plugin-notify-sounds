@@ -78,9 +78,16 @@ class MockOscillator extends MockNode {
 		this.type = 'sine';
 		this.frequency = new MockParam();
 		scheduled.push(this);
+		this.stopped = false;
 	}
 	start() {}
-	stop() {}
+	stop(...args) {
+		// A preset stops itself with the time it ends; only a bare stop() is
+		// an interruption, which is what a second preview does.
+
+		this.stopCalls = [...(this.stopCalls ?? []), args.length];
+		if (args.length === 0) this.stopped = true;
+	}
 }
 class MockGain extends MockNode {
 	constructor() {
@@ -100,9 +107,16 @@ class MockBufferSource extends MockNode {
 	constructor() {
 		super();
 		scheduled.push(this);
+		this.stopped = false;
 	}
 	start() {}
-	stop() {}
+	stop(...args) {
+		// A preset stops itself with the time it ends; only a bare stop() is
+		// an interruption, which is what a second preview does.
+
+		this.stopCalls = [...(this.stopCalls ?? []), args.length];
+		if (args.length === 0) this.stopped = true;
+	}
 }
 globalThis.window.AudioContext = class {
 	constructor() {
@@ -1219,6 +1233,27 @@ assert.ok(!triggerLabels(filledTree).some((label) => /^sound\.custom[123]$/.test
 form.value = { ...form.value, decisionSound: 'custom1' };
 const chosenTree = renderSection();
 assert.equal(triggerLabels(chosenTree)[0], 'ring', 'a trigger on a clip shows the clip name, not its id');
+
+// A second 试听 silences the first instead of stacking on top of it.
+form.value = { ...baseValue(), decisionSound: 'bell' };
+scheduled.length = 0;
+injected.preview('bell', 60);
+const firstPreview = [...scheduled];
+injected.preview('bell', 60);
+assert.ok(firstPreview.length > 0, 'the first preview scheduled something');
+assert.ok(firstPreview.every((node) => node.stopped === true), 'a second preview stops the first');
+assert.equal(scheduled.filter((node) => node.stopped !== true).length, scheduled.length - firstPreview.length, 'and only the new batch is left sounding');
+
+// The clip path goes through a decode, so a click that arrives before the
+// first decode finishes must be dropped rather than join it.
+form.value = { ...baseValue(), custom1File: 'a'.repeat(64) + '.mp3', custom1Name: 'ring' };
+scheduled.length = 0;
+injected.previewSound('custom1', 60);
+injected.previewSound('custom1', 60);
+await new Promise((resolve) => {
+	setTimeout(resolve, 10);
+});
+assert.equal(scheduled.filter((node) => node.stopped !== true && node.buffer !== undefined).length, 1, 'two quick clicks on a clip leave one sound playing');
 
 // A trigger choosing it plays the stored file.
 form.value = { ...form.value, decisionSound: 'custom1' };
