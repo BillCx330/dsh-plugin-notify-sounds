@@ -80,6 +80,8 @@ DSH 的状态提示只有视觉——状态点、侧栏标记。你一切到别�
 **升级由包管理器安装**，这样 profile 的 lockfile 会跟着一起更新——DSH 插件无法自己持久地更新自己（管理器拒绝已声明的包，而它的「先移除再安装」会先卸载掉正要完成安装的代码）。所以插件只负责**检查**，并告诉你从哪里装：
 
 - **在 DSH 里（推荐，也是唯一实测过的路径）**：**左侧栏「插件」** → 在「已安装插件」里卸载本插件 → **添加插件** → 粘贴 `dsh-plugin-notify-sounds@<版本>` → 安装 → 重启 DSH。（务必带版本号：pnpm 的 `minimumReleaseAge` 会让刚发布不到 24 小时的版本不参与自动解析，只写包名会装回上一个版本。）
+
+卸载不会丢东西：偏好和自定义音频都存在 profile 里（`cordis.patch.yml` 与 `notify-sounds/sounds/`），重装后自动恢复——包括升级到 1.9.0 时由旧版内嵌音频自动迁移过来的那份。
 - **装了市场插件**（[dshmarket](https://www.npmjs.com/package/dshmarket)）：在市场里一键更新。
 - **`web` profile**：`dsh plugin --profile <你的 profile> add dsh-plugin-notify-sounds@<版本>`。
 

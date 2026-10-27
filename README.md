@@ -80,6 +80,8 @@ The "install source" dropdown above the box picks the download mirror (mainland 
 **Upgrades are installed by the package manager**, so the profile's lockfile moves with the files — a DSH plugin cannot install its own update durably (the manager refuses a package that is already declared, and its remove-then-install step unloads the very code that would finish the install). The plugin therefore only *checks*, and tells you where to install:
 
 - **Inside DSH (recommended, and the only path verified on the Desktop)**: **Plugins** in the left sidebar → uninstall this plugin under *Installed plugins* → **Add plugin** → paste `dsh-plugin-notify-sounds@<version>` → Install → restart DSH. (Keep the version: pnpm's `minimumReleaseAge` policy keeps a freshly published version out of automatic resolution for its first 24 hours, so the bare name can resolve to the previous release.)
+
+Uninstalling keeps your settings: preferences and uploaded audio live in the profile (`cordis.patch.yml` and `notify-sounds/sounds/`), so a reinstall restores them — including a clip migrated out of a pre-1.9.0 install.
 - **With the marketplace plugin** ([dshmarket](https://www.npmjs.com/package/dshmarket)): update it in one click there.
 - **On a `web` profile**: `dsh plugin --profile <your profile> add dsh-plugin-notify-sounds@<version>`.
 
