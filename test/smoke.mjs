@@ -696,12 +696,12 @@ assert.equal(tree.type, 'div');
 assert.equal(tree.children[0].length, 3, 'title, intro, rows');
 assert.equal(tree.children[0][0].type, 'h2', 'the title is a heading like the shipped sections');
 assert.equal(tree.children[0][1].type, 'p', 'the intro is a paragraph');
-const rows = tree.children[0][2].children[0];
-assert.equal(rows.length, 17, 'seventeen rows render');
+const rows = tree.children[0][2].children[0].filter(Boolean);
+assert.equal(rows.length, 14, 'fourteen rows render before any trigger picks Custom');
 assert.deepEqual(
 	rows.map((row) => row.props.key),
-	['enabled', 'volume', 'decision', 'decision-file', 'question', 'question-file', 'completion', 'completion-file', 'subagent', 'goalFinalOnly', 'systemNotify', 'titleFlash', 'renotify', 'quiet', 'onlyWhenHidden', 'updateAutoCheck', 'update'],
-	'row order: master switch, volume, each of the three triggers followed by its own custom-sound row, then sub-agent scope, goal final-round scope, notification, title flash, repeat reminder, quiet hours, hidden-only, the auto-check toggle and the update row',
+	['enabled', 'volume', 'decision', 'question', 'completion', 'subagent', 'goalFinalOnly', 'systemNotify', 'titleFlash', 'renotify', 'quiet', 'onlyWhenHidden', 'updateAutoCheck', 'update'],
+	'row order: master switch, volume, the three triggers (each grows its own file row when it picks Custom), then sub-agent scope, goal final-round scope, notification, title flash, repeat reminder, quiet hours, hidden-only, the auto-check toggle and the update row',
 );
 
 // --- Assertions: uncontrolled volume slider ------------------------------------
@@ -1127,8 +1127,8 @@ const menuItems = [];
 walkElements(tree, (element) => {
 	if (element.props['data-menu-item'] !== undefined) menuItems.push(element);
 });
-assert.equal(menuItems.length, 30, 'three pickers render one menu item per offered preset');
-assert.ok(!menuItems.some((element) => element.props['data-menu-item'] === 'custom'), 'no picker offers Custom without an upload');
+assert.equal(menuItems.length, 33, 'three pickers render one menu item per preset, Custom included');
+assert.equal(menuItems.filter((element) => element.props['data-menu-item'] === 'custom').length, 3, 'every picker offers Custom, even before a file exists');
 assert.ok(menuItems.every((element) => typeof element.children[0] === 'string' && element.children[0] !== ''), 'every menu entry carries a non-empty label');
 // Clicking a menu item writes the field and previews the sound.
 scheduled.length = 0;
@@ -1141,11 +1141,24 @@ assert.equal(scheduled.length, 2, 'picking a menu item previews the sound');
 // Each trigger owns its row: the file goes to the Host's store, the config
 // keeps only the stored name, and the picker follows the upload so the choice
 // takes effect immediately.
+// Only a trigger that picked Custom grows a file row, so the inputs are
+// collected from a render where all three did.
+form.value = { ...baseValue(), decisionSound: 'custom', questionSound: 'custom', completionSound: 'custom' };
+const customTree = renderTree(section.component({
+	useConfig: (selector) => selector(form.getSnapshot()),
+	setField: injected.setField,
+	preview: injected.preview,
+	previewSlot: injected.previewSlot,
+	uploadSound: injected.uploadSound,
+	removeSound: injected.removeSound,
+	t: (key) => key,
+}));
 const fileInputs = [];
-walkElements(tree, (element) => {
+walkElements(customTree, (element) => {
 	if (element.type === 'input' && element.props.type === 'file') fileInputs.push(element);
 });
-assert.equal(fileInputs.length, 3, 'one upload control per trigger');
+assert.equal(fileInputs.length, 3, 'one upload control per trigger that picked Custom');
+assert.equal(customTree.children[0][2].children[0].length, 17, 'and the page grows by exactly those three rows');
 
 const makeFile = (name, bytes, size = bytes.byteLength) => ({
 	name,
@@ -1171,7 +1184,7 @@ assert.deepEqual(
 	],
 	'the config keeps the stored name and the original name, not the bytes',
 );
-assert.ok(formWrites.some((write) => write.field === 'decisionSound' && write.value === 'custom'), 'uploading points that trigger at its own sound');
+assert.ok(!formWrites.some((write) => write.field === 'decisionSound'), 'a trigger already on Custom is not rewritten');
 
 // The same bytes for another trigger: the store answers with the same name,
 // and the two slots share one file.
@@ -1185,6 +1198,28 @@ assert.deepEqual(
 	],
 	'a second trigger stores its own reference to the same file',
 );
+
+// A trigger that still holds a file but moved its picker away switches back
+// when a new file is chosen: the upload is the intent.
+form.value = { ...baseValue(), decisionSound: 'bell', customDecisionFile: 'b'.repeat(64) + '.mp3', customDecisionName: 'old.mp3' };
+const backTree = renderTree(section.component({
+	useConfig: (selector) => selector(form.getSnapshot()),
+	setField: injected.setField,
+	preview: injected.preview,
+	previewSlot: injected.previewSlot,
+	uploadSound: injected.uploadSound,
+	removeSound: injected.removeSound,
+	t: (key) => key,
+}));
+const backInputs = [];
+walkElements(backTree, (element) => {
+	if (element.type === 'input' && element.props.type === 'file') backInputs.push(element);
+});
+assert.equal(backInputs.length, 1, 'a stored file keeps its row visible even when the picker moved away');
+formWrites.length = 0;
+await uploadTo(backInputs[0], makeFile('new.mp3', new TextEncoder().encode('good-audio')));
+assert.ok(formWrites.some((write) => write.field === 'decisionSound' && write.value === 'custom'), 'choosing a file switches the picker back to Custom');
+form.value = { ...baseValue(), decisionSound: 'custom', questionSound: 'custom', completionSound: 'custom' };
 
 // An oversized file is refused before anything is sent or written.
 const writesBeforeBig = formWrites.length;

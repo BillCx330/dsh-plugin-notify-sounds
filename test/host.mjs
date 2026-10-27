@@ -665,6 +665,7 @@ try {
 	assert.equal(host.writeSoundFile(Buffer.from('this is not audio')), undefined, 'bytes that are not audio are refused');
 	assert.equal(host.writeSoundFile(Buffer.alloc(host.SOUND_MAX_BYTES + 1)), undefined, 'an oversized upload is refused');
 	assert.equal(client.SOUND_PATH, host.SOUND_PATH, 'the sound route path matches between the halves');
+	assert.equal(client.SOUND_MAX_BYTES, host.SOUND_MAX_BYTES, 'and so does the upload cap the page enforces before the Host sees it');
 
 	const soundRoute = registeredRoutes.find((entry) => entry.path === host.SOUND_PATH);
 	assert.ok(soundRoute, 'the sound route is registered');
