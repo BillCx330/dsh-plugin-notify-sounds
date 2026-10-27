@@ -588,11 +588,21 @@ const ctx = {
 // during apply through the initial sync.
 const openPanel = makePanel();
 currentPanel = openPanel.panel;
-// A pre-1.9.0 install carries its sound inline. The migration runs as soon as
-// the namespace is served: one file, three references, and only then is the
-// legacy payload cleared — a failed migration has to leave the old copy.
+// Migration runs as soon as the namespace is served, and it has TWO older
+// shapes to fold into the library: 1.9.0-early's per-trigger file, and the
+// pre-1.9.0 inline payload. This fixture carries both, so it also pins the
+// part that used to leave 400KB behind: a payload is adopted even when the
+// library already holds a clip.
 formWrites.length = 0;
-form.value = { ...baseValue(), customSound: btoa('good-audio'), customSoundName: 'old.mp3', completionSound: 'custom' };
+form.value = {
+	...baseValue(),
+	decisionSound: 'custom',
+	customDecisionFile: 'b'.repeat(64) + '.mp3',
+	customDecisionName: 'decision.mp3',
+	completionSound: 'custom',
+	customSound: btoa('good-audio'),
+	customSoundName: 'old.mp3',
+};
 const legacyUploads = fetchCalls.length;
 exports.apply(ctx);
 
@@ -602,17 +612,17 @@ await new Promise((resolve) => {
 assert.equal(
 	fetchCalls.slice(legacyUploads).filter((call) => String(call.input).startsWith('/notify-sounds/sound') && call.init?.method === 'POST').length,
 	1,
-	'a legacy inline payload is uploaded to the store once',
+	'only the inline payload is uploaded; the per-trigger file is already stored',
 );
-const migrationWrites = formWrites.filter((write) => write.field.startsWith('custom'));
-assert.deepEqual(
-	migrationWrites.filter((write) => write.field === 'custom1File').map((write) => write.value),
-	['a'.repeat(64) + '.mp3'],
-	'the inline payload becomes one entry in the sound library',
-);
-assert.equal(migrationWrites.find((write) => write.field === 'custom1Name')?.value, 'old.mp3', 'named after the old display name');
-assert.ok(formWrites.some((write) => write.field === 'completionSound' && write.value === 'custom1'), 'a trigger that used the old Custom entry points at the new entry');
-assert.equal(migrationWrites.filter((write) => write.field === 'customSound').at(-1)?.value, '', 'the legacy payload is cleared only after the store accepted it');
+const fieldWrites = (field) => formWrites.filter((write) => write.field === field).map((write) => write.value);
+assert.deepEqual(fieldWrites('custom1File'), ['b'.repeat(64) + '.mp3'], 'the per-trigger file takes the first slot');
+assert.equal(fieldWrites('custom1Name')[0], 'decision.mp3', 'under the name it had');
+assert.deepEqual(fieldWrites('custom2File'), ['a'.repeat(64) + '.mp3'], 'the inline payload takes the next free slot rather than staying inline');
+assert.equal(fieldWrites('custom2Name')[0], 'old.mp3', 'named after the old display name');
+assert.ok(formWrites.some((write) => write.field === 'decisionSound' && write.value === 'custom1'), 'the trigger that used the per-trigger file points at its slot');
+assert.ok(formWrites.some((write) => write.field === 'completionSound' && write.value === 'custom2'), 'the trigger that used the inline payload points at its slot');
+assert.deepEqual(fieldWrites('customDecisionFile'), [''], 'the old per-trigger reference is cleared once its slot is written');
+assert.deepEqual(fieldWrites('customSound'), [''], 'the inline payload is cleared only after the store accepted it');
 form.value = baseValue();
 
 // --- Assertions: registration -------------------------------------------------
