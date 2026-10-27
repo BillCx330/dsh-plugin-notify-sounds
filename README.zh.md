@@ -16,7 +16,7 @@
 **安装**：DSH → 左侧栏「插件」→ 添加插件，粘贴下面这行（**带上版本号**，否则发布不满 24 小时的版本会被 pnpm 的 `minimumReleaseAge` 解析回上一版），点「安装」：
 
 ```
-dsh-plugin-notify-sounds@1.8.6
+dsh-plugin-notify-sounds@1.9.0
 ```
 
 ---
@@ -35,7 +35,7 @@ dsh-plugin-notify-sounds@1.8.6
 | **没看到会再提醒** | 未处理决策按 1/5/15/30 分钟重复提醒 |
 | **只提醒你关心的** | 子智能体（后台任务）默认完全静默，只提醒主对话，可开关 |
 | **该安静时安静** | 静音时段（如 22:00–08:00，可跨午夜）、仅页面不可见时提示、总开关一键全静音 |
-| **声音随你** | 九种内置音效、自定义铃声上传、音量调节，每项独立开关 |
+| **声音随你** | 九种内置音效；**每种触发都能配自己的音频文件**（mp3 / wav / ogg / m4a，≤15 秒）；音量调节；每项独立开关 |
 | **检测更新** | 设置里检查 npm 新版本，并指向真正负责安装的入口——**左侧栏「插件」**（卸载后再装）、市场，或 web profile 上的 `dsh plugin add`；若当前安装未被 lockfile 记录，会在行内提示 |
 
 ## 💡 为什么需要它
@@ -54,7 +54,7 @@ DSH 的状态提示只有视觉——状态点、侧栏标记。你一切到别�
 
 设置 → **提示音**（位于「通用设置」与「模型」之间），每项功能都有独立开关，界面与 DSH 原生设置完全一致：
 
-总开关与音量 · 三种触发各自的音效（含试听）· 子智能体提醒 · 系统通知 · 窗口标题提醒 · 重复提醒间隔 · 静音时段 · 仅后台提示 · 自定义铃声上传 · 自动检查更新（安装走包管理器）
+总开关与音量 · 三种触发各自的音效（含试听）· 子智能体提醒 · 系统通知 · 窗口标题提醒 · 重复提醒间隔 · 静音时段 · 仅后台提示 · 每种触发各自的音频文件 · 自动检查更新（安装走包管理器）
 
 改动即时生效，无需重启。
 
@@ -66,7 +66,7 @@ DSH 的状态提示只有视觉——状态点、侧栏标记。你一切到别�
 2. 在输入框粘贴包名**和版本号**（本插件已发布在 [npm](https://www.npmjs.com/package/dsh-plugin-notify-sounds)）：
 
    ```
-   dsh-plugin-notify-sounds@1.8.6
+   dsh-plugin-notify-sounds@1.9.0
    ```
 
    版本号不要省：pnpm 的 `minimumReleaseAge` 策略会把刚发布不到 24 小时的版本挡在外面，只写包名会解析回上一个版本。想看最新版本号可到 [npm](https://www.npmjs.com/package/dsh-plugin-notify-sounds?activeTab=versions) 或 [Releases](https://github.com/BillCx330/dsh-plugin-notify-sounds/releases) 查。
@@ -98,7 +98,7 @@ dsh plugin --profile <你的 profile> add github:BillCx330/dsh-plugin-notify-sou
 **Release 压缩包** —— 从 [Releases](https://github.com/BillCx330/dsh-plugin-notify-sounds/releases) 下载 `.tgz`，用它**在磁盘上的路径**安装：
 
 ```sh
-dsh plugin --profile <你的 profile> add ./dsh-plugin-notify-sounds-1.8.6.tgz
+dsh plugin --profile <你的 profile> add ./dsh-plugin-notify-sounds-1.9.0.tgz
 ```
 
 （`dsh plugin add` 把参数原样交给包管理器，所以要给本地文件路径，不能填下载地址。）
@@ -115,6 +115,7 @@ dsh plugin --profile <你的 profile> add ./dsh-plugin-notify-sounds
 
 ## ⚠️ 已知边界
 
+- **自定义音频存在哪**：音频按内容哈希存成 `profiles/<profile>/notify-sounds/sounds/<sha256>.<ext>`，配置里只留文件名。**备份或换机要拷整个 profile 目录**——只拷 `cordis.patch.yml` 不会带上音频。卸载插件后最多留下最后一个文件（几百 KB）。
 - **手改配置**：偏好写在 profile 的 `cordis.patch.yml`，值必须符合 schema（音量 0–100、音效为预设之一、时间 `HH:MM`）；写错会让插件不加载，改回即可。设置界面只会写入合法值。
 - **升级由包管理器安装，不再由插件自己完成**：1.8.0 移除了自安装器（原地写文件从不会更新 profile 的 lockfile，于是下一次插件安装会静默把旧版本装回来）。更新行仍会检查 npm、报告新版，然后指向真正负责安装的入口——**左侧栏「插件」**（卸载后再装）、市场，或 web profile 上的 `dsh plugin add`。
 - **1.7.0 及更早版本**可以通过它们自带的自更新到达 1.8.0（1.8.0 保持同样的七个文件名），但这次到达不会被 pnpm 登记：按上面的方式用包管理器重装一次，此后所有升级都会留下。1.6.9 及更早无法安装「新增了文件」的版本——固定白名单会安全拒绝；同样的一次性重装即可解决。

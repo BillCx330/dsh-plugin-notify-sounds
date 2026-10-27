@@ -205,7 +205,7 @@ const makeCtx = () => ({
 
 host.apply(makeCtx());
 assert.deepEqual(configureCalls.map((call) => call.options), [{ auto: false }], 'the auto inventory page is suppressed');
-assert.equal(registeredRoutes.length, 3, 'three routes are registered: focus, update check and the goal phase read');
+assert.equal(registeredRoutes.length, 4, 'four routes are registered: focus, update check, the goal phase read and the sound store');
 const goalRoute = registeredRoutes.find((entry) => entry.path === host.GOAL_PHASE_PATH);
 assert.ok(goalRoute, 'the goal phase route is registered');
 assert.equal(goalRoute.kind, 'exact', 'the goal phase route is an exact match');
@@ -646,4 +646,83 @@ for (const filename of ['README.md', 'README.zh.md']) {
 	assert.equal(found.archive, ownManifest.version, `${filename}: the release-archive example must name ${ownManifest.version}`);
 }
 
-console.log('host test: all assertions passed');
+
+// --- Assertions: uploaded sound store (1.9.0) ------------------------------------
+// The store is the only place this plugin writes files. Its whole contract is
+// three rules: names come from content, only audio gets in, and nothing may
+// name a path outside the directory.
+const storeRoot = mkdtempSync(join(tmpdir(), 'notify-sounds-store-'));
+const previousStoreEnv = process.env.DSH_PROFILE_DIR;
+process.env.DSH_PROFILE_DIR = storeRoot;
+try {
+	const wav = Buffer.concat([Buffer.from('RIFF'), Buffer.alloc(4), Buffer.from('WAVE'), Buffer.from('fmt ')]);
+	const storedName = host.writeSoundFile(wav);
+	assert.match(storedName, /^[a-f0-9]{64}\.wav$/, 'the stored name is the digest plus a detected extension');
+	assert.equal(host.writeSoundFile(wav), storedName, 'the same bytes store to the same name');
+	assert.equal(host.soundMimeType(storedName), 'audio/wav', 'the content type follows the extension');
+	assert.equal(host.soundFilePath('..\\..\\escape.wav'), undefined, 'a climbing name is refused');
+	assert.equal(host.soundFilePath('not-a-digest.wav'), undefined, 'a name that is not a digest is refused');
+	assert.equal(host.writeSoundFile(Buffer.from('this is not audio')), undefined, 'bytes that are not audio are refused');
+	assert.equal(host.writeSoundFile(Buffer.alloc(host.SOUND_MAX_BYTES + 1)), undefined, 'an oversized upload is refused');
+	assert.equal(client.SOUND_PATH, host.SOUND_PATH, 'the sound route path matches between the halves');
+
+	const soundRoute = registeredRoutes.find((entry) => entry.path === host.SOUND_PATH);
+	assert.ok(soundRoute, 'the sound route is registered');
+	const callSound = async (method, search, body) => {
+		const res = {
+			statusCode: undefined,
+			headers: {},
+			payload: undefined,
+			setHeader(name, value) {
+				this.headers[name] = value;
+			},
+			end(payload) {
+				this.payload = payload;
+			},
+		};
+		const req = {
+			method,
+			url: `${host.SOUND_PATH}${search}`,
+			headers: {},
+			async *[Symbol.asyncIterator]() {
+				if (body !== undefined) yield body;
+			},
+		};
+		await soundRoute.handler(req, res);
+		return res;
+	};
+
+	const got = await callSound('GET', `?file=${encodeURIComponent(storedName)}`);
+	assert.equal(got.statusCode, 200, 'a stored sound is served');
+	assert.equal(got.headers['content-type'], 'audio/wav', 'with its content type');
+	assert.equal(got.headers['cache-control'], 'public, max-age=31536000, immutable', 'and an immutable cache, because the name is the digest');
+	assert.deepEqual(Buffer.from(got.payload), wav, 'byte for byte');
+
+	const head = await callSound('HEAD', `?file=${encodeURIComponent(storedName)}`);
+	assert.equal(head.statusCode, 200, 'a HEAD answers the same status');
+	assert.equal(head.payload, undefined, 'without a body');
+
+	assert.equal((await callSound('GET', '?file=missing.wav')).statusCode, 404, 'a name that is not stored is a 404');
+	assert.equal((await callSound('GET', `?file=${encodeURIComponent('../../escape.wav')}`)).statusCode, 404, 'a climbing name is a 404');
+	assert.equal((await callSound('PUT', '')).statusCode, 405, 'a method with no meaning here is refused');
+	assert.equal((await callSound('PUT', '')).headers.allow, 'GET, POST, DELETE', 'and the 405 lists what is allowed');
+
+	const posted = await callSound('POST', '', wav);
+	assert.equal(posted.statusCode, 200, 'an upload is stored');
+	assert.equal(JSON.parse(posted.payload).file, storedName, 'and answers with the name the config should keep');
+	assert.equal((await callSound('POST', '', Buffer.from('not audio'))).statusCode, 415, 'bytes that are not audio are refused');
+	assert.equal((await callSound('POST', '', Buffer.alloc(host.SOUND_MAX_BYTES + 1))).statusCode, 413, 'an oversized body is refused');
+
+	rejectionFor = () => 401;
+	assert.equal((await callSound('GET', `?file=${encodeURIComponent(storedName)}`)).statusCode, 401, 'a fenced read is refused');
+	assert.equal((await callSound('POST', '', wav)).statusCode, 401, 'a fenced upload is refused');
+	rejectionFor = () => undefined;
+
+	assert.equal((await callSound('DELETE', `?file=${encodeURIComponent(storedName)}`)).statusCode, 204, 'a delete is accepted');
+	assert.equal((await callSound('GET', `?file=${encodeURIComponent(storedName)}`)).statusCode, 404, 'and the sound is gone');
+} finally {
+	if (previousStoreEnv === undefined) delete process.env.DSH_PROFILE_DIR;
+	else process.env.DSH_PROFILE_DIR = previousStoreEnv;
+	rmSync(storeRoot, { recursive: true, force: true });
+}
+console.log("host test: all assertions passed");

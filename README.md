@@ -16,7 +16,7 @@ Walk away from the window without missing anything: an OS notification in the ba
 **Install**: DSH → **Plugins** in the left sidebar → Add plugin, paste the line below (keep the version — a release younger than 24 hours is resolved back to the previous one by pnpm's `minimumReleaseAge`) and press **Install**:
 
 ```
-dsh-plugin-notify-sounds@1.8.6
+dsh-plugin-notify-sounds@1.9.0
 ```
 
 ---
@@ -35,7 +35,7 @@ Every visual detail of the settings section comes from DSH's own design system: 
 | **Missed it? It reminds again** | Unanswered decisions re-ping every 1/5/15/30 minutes — and **stop for good once you have seen them**, even if you switch away again |
 | **Only what you care about** | Sub-agents (background tasks) are completely silent by default — only your own conversation is announced |
 | **Quiet when it should be** | Quiet hours (e.g. 22:00–08:00, wrapping past midnight), notify-only-when-hidden, and a master switch |
-| **Your sound, your way** | Nine built-in sounds, custom ringtone upload, volume — each feature with its own toggle |
+| **Your sound, your way** | Nine built-in sounds; **each trigger can carry its own audio file** (mp3 / wav / ogg / m4a, up to 15s); volume — each feature with its own toggle |
 | **Update checks** | Checks npm for a newer version and points at the route that installs it — the **Plugins** panel in the sidebar (uninstall, then add again), the marketplace, or `dsh plugin add` on a web profile; the row also flags an install the profile's lockfile does not match |
 
 ## 💡 Why
@@ -54,7 +54,7 @@ Or upload your own ringtone (mp3/wav/ogg, ≤512KB, validated and volume-normali
 
 Settings → **Sounds** (between General and Models). Every feature has its own toggle, styled exactly like DSH's own preference pages:
 
-master switch and volume · per-trigger sounds with preview · sub-agent alerts · system notifications · window title alert · repeat interval · quiet hours · hidden-only mode · custom ringtone upload · update checks (installs go through the package manager)
+master switch and volume · per-trigger sounds with preview · sub-agent alerts · system notifications · window title alert · repeat interval · quiet hours · hidden-only mode · one audio file per trigger · update checks (installs go through the package manager)
 
 Everything applies immediately — no restart needed.
 
@@ -66,7 +66,7 @@ Everything applies immediately — no restart needed.
 2. Paste the package name **with a version** (this plugin is published on [npm](https://www.npmjs.com/package/dsh-plugin-notify-sounds)):
 
    ```
-   dsh-plugin-notify-sounds@1.8.6
+   dsh-plugin-notify-sounds@1.9.0
    ```
 
    Do not drop the version: pnpm's `minimumReleaseAge` policy keeps a release younger than 24 hours out of automatic resolution, so the bare name resolves to the previous one. The current version is on [npm](https://www.npmjs.com/package/dsh-plugin-notify-sounds?activeTab=versions) and in [Releases](https://github.com/BillCx330/dsh-plugin-notify-sounds/releases).
@@ -98,7 +98,7 @@ dsh plugin --profile <your profile> add github:BillCx330/dsh-plugin-notify-sound
 **Release archive** — download the `.tgz` from [Releases](https://github.com/BillCx330/dsh-plugin-notify-sounds/releases) and install it by its **path on disk**:
 
 ```sh
-dsh plugin --profile <your profile> add ./dsh-plugin-notify-sounds-1.8.6.tgz
+dsh plugin --profile <your profile> add ./dsh-plugin-notify-sounds-1.9.0.tgz
 ```
 
 (`dsh plugin add` hands its argument straight to the package manager, so it takes a local file path — a download URL will not work.)
@@ -115,6 +115,7 @@ The command line writes `dsh.profile.bundles` and installs the dependency for yo
 
 ## ⚠️ Known limitations
 
+- **Where custom audio lives**: each file is stored by content hash under `profiles/<profile>/notify-sounds/sounds/<sha256>.<ext>`, and the config keeps only its name. **Back up (or move) the whole profile directory** — copying `cordis.patch.yml` alone does not carry the audio. After uninstalling, at most the last file stays behind (a few hundred KB).
 - **Hand-edited config**: preferences live in the profile's `cordis.patch.yml`; values must match the schema (volume 0–100, a preset id, `HH:MM` times) or the plugin declines to load — just fix the value. The settings UI only ever writes valid values.
 - **Upgrades are installed by the package manager, not by the plugin**: 1.8.0 removed the self-installer (writing files in place never updated the profile's lockfile, so the next plugin install silently restored the old version). The update row still checks npm and reports a newer version, then points at the route that installs — the **Plugins** panel in the sidebar (uninstall, then add again), the marketplace, or `dsh plugin add` on a web profile.
 - **Versions up to 1.7.0** reach 1.8.0 through their own updater (1.8.0 keeps the same seven filenames), but that arrival is not registered with pnpm: reinstall once through the package manager as above and every later upgrade stays in place. Versions up to 1.6.9 cannot install a release that adds a file — their fixed whitelist refuses it safely; the same one-time reinstall fixes that too.
