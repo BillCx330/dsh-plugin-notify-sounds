@@ -32,7 +32,9 @@ globalThis.fetch = (input, init) => {
 		const method = init?.method ?? "GET";
 		if (method === "POST") return Promise.resolve({ ok: true, json: () => Promise.resolve({ file: "a".repeat(64) + ".mp3" }) });
 		if (method === "DELETE") return Promise.resolve({ ok: true });
-		return Promise.resolve({ ok: !soundMissing });
+		if (method === "HEAD") return Promise.resolve({ ok: !soundMissing });
+		// GET: the bytes the page would decode.
+		return Promise.resolve({ ok: !soundMissing, arrayBuffer: () => Promise.resolve(new TextEncoder().encode("good-audio").buffer) });
 	}
 	if (target.startsWith("/notify-sounds/goal")) {
 		const search = target.split("?")[1] ?? "";
@@ -576,7 +578,7 @@ currentPanel = openPanel.panel;
 // the namespace is served: one file, three references, and only then is the
 // legacy payload cleared — a failed migration has to leave the old copy.
 formWrites.length = 0;
-form.value = { ...baseValue(), customSound: btoa('good-audio'), customSoundName: 'old.mp3' };
+form.value = { ...baseValue(), customSound: btoa('good-audio'), customSoundName: 'old.mp3', completionSound: 'custom' };
 const legacyUploads = fetchCalls.length;
 exports.apply(ctx);
 
@@ -588,12 +590,14 @@ assert.equal(
 	1,
 	'a legacy inline payload is uploaded to the store once',
 );
-const migrationWrites = formWrites.filter((write) => write.field.startsWith('custom') );
+const migrationWrites = formWrites.filter((write) => write.field.startsWith('custom'));
 assert.deepEqual(
-	migrationWrites.filter((write) => write.field.endsWith('File')).map((write) => write.field).sort(),
-	['customCompletionFile', 'customDecisionFile', 'customQuestionFile'],
-	'all three triggers point at the migrated file',
+	migrationWrites.filter((write) => write.field === 'custom1File').map((write) => write.value),
+	['a'.repeat(64) + '.mp3'],
+	'the inline payload becomes one entry in the sound library',
 );
+assert.equal(migrationWrites.find((write) => write.field === 'custom1Name')?.value, 'old.mp3', 'named after the old display name');
+assert.ok(formWrites.some((write) => write.field === 'completionSound' && write.value === 'custom1'), 'a trigger that used the old Custom entry points at the new entry');
 assert.equal(migrationWrites.filter((write) => write.field === 'customSound').at(-1)?.value, '', 'the legacy payload is cleared only after the store accepted it');
 form.value = baseValue();
 
@@ -697,11 +701,11 @@ assert.equal(tree.children[0].length, 3, 'title, intro, rows');
 assert.equal(tree.children[0][0].type, 'h2', 'the title is a heading like the shipped sections');
 assert.equal(tree.children[0][1].type, 'p', 'the intro is a paragraph');
 const rows = tree.children[0][2].children[0].filter(Boolean);
-assert.equal(rows.length, 14, 'fourteen rows render before any trigger picks Custom');
+assert.equal(rows.length, 15, 'fifteen rows render: the custom-sound row is always there');
 assert.deepEqual(
 	rows.map((row) => row.props.key),
-	['enabled', 'volume', 'decision', 'question', 'completion', 'subagent', 'goalFinalOnly', 'systemNotify', 'titleFlash', 'renotify', 'quiet', 'onlyWhenHidden', 'updateAutoCheck', 'update'],
-	'row order: master switch, volume, the three triggers (each grows its own file row when it picks Custom), then sub-agent scope, goal final-round scope, notification, title flash, repeat reminder, quiet hours, hidden-only, the auto-check toggle and the update row',
+	['enabled', 'volume', 'decision', 'question', 'completion', 'custom', 'subagent', 'goalFinalOnly', 'systemNotify', 'titleFlash', 'renotify', 'quiet', 'onlyWhenHidden', 'updateAutoCheck', 'update'],
+	'row order: master switch, volume, the three triggers, the custom-sound library row, then sub-agent scope, goal final-round scope, notification, title flash, repeat reminder, quiet hours, hidden-only, the auto-check toggle and the update row',
 );
 
 // --- Assertions: uncontrolled volume slider ------------------------------------
@@ -892,7 +896,7 @@ assert.equal(scheduled.length, 3, 'a pending question plays the chime preset (th
 // The custom preset decodes the uploaded payload and plays it through a buffer source.
 form.value = { ...baseValue(), customSound: btoa('good-audio'), decisionSound: 'custom' };
 scheduled.length = 0;
-injected.previewSlot('decision', 60);
+publish([['s3b', { running: true, pendingInteraction: { kind: 'approval', displayReason: '允许执行命令' } }]]);
 await new Promise((resolve) => {
 	setTimeout(resolve, 10);
 });
@@ -915,7 +919,7 @@ form.value = { ...baseValue(), decisionSound: 'custom', customSound: '!!!not bas
 scheduled.length = 0;
 let threwFromPreview = false;
 try {
-	injected.previewSlot('decision', 60);
+	injected.previewSound('custom1', 60);
 } catch {
 	threwFromPreview = true;
 }
@@ -1127,8 +1131,8 @@ const menuItems = [];
 walkElements(tree, (element) => {
 	if (element.props['data-menu-item'] !== undefined) menuItems.push(element);
 });
-assert.equal(menuItems.length, 33, 'three pickers render one menu item per preset, Custom included');
-assert.equal(menuItems.filter((element) => element.props['data-menu-item'] === 'custom').length, 3, 'every picker offers Custom, even before a file exists');
+assert.equal(menuItems.length, 30, 'three pickers render nine presets and Off while the library is empty');
+assert.ok(!menuItems.some((element) => element.props['data-menu-item'].startsWith('custom')), 'no picker offers a custom entry while the library is empty');
 assert.ok(menuItems.every((element) => typeof element.children[0] === 'string' && element.children[0] !== ''), 'every menu entry carries a non-empty label');
 // Clicking a menu item writes the field and previews the sound.
 scheduled.length = 0;
@@ -1137,188 +1141,199 @@ coinItem.props.onClick();
 assert.deepEqual(formWrites.at(-1), { field: 'decisionSound', value: 'coin' }, 'picking a menu item writes the field');
 assert.equal(scheduled.length, 2, 'picking a menu item previews the sound');
 
-// --- Assertions: per-trigger custom sounds -------------------------------------
-// Each trigger owns its row: the file goes to the Host's store, the config
-// keeps only the stored name, and the picker follows the upload so the choice
-// takes effect immediately.
-// Only a trigger that picked Custom grows a file row, so the inputs are
-// collected from a render where all three did.
-form.value = { ...baseValue(), decisionSound: 'custom', questionSound: 'custom', completionSound: 'custom' };
-const customTree = renderTree(section.component({
+// --- Assertions: the custom-sound library --------------------------------------
+// One row adds a clip; each clip then appears under it and in all three
+// pickers, so a trigger picks a recording by name rather than by position.
+const renderSection = () => renderTree(section.component({
 	useConfig: (selector) => selector(form.getSnapshot()),
 	setField: injected.setField,
 	preview: injected.preview,
-	previewSlot: injected.previewSlot,
-	uploadSound: injected.uploadSound,
-	removeSound: injected.removeSound,
+	previewSound: injected.previewSound,
+	onAddSound: injected.onAddSound,
+	onRemoveSound: injected.onRemoveSound,
 	t: (key) => key,
 }));
-const fileInputs = [];
-walkElements(customTree, (element) => {
-	if (element.type === 'input' && element.props.type === 'file') fileInputs.push(element);
+const menuItemsOf = (treeNode) => {
+	const found = [];
+	walkElements(treeNode, (element) => {
+		if (element.props?.['data-menu-item'] !== undefined) found.push(element);
+	});
+	return found;
+};
+
+form.value = { ...baseValue() };
+const baseTree = renderSection();
+const addInputs = [];
+walkElements(baseTree, (element) => {
+	if (element.type === 'input' && element.props.type === 'file') addInputs.push(element);
 });
-assert.equal(fileInputs.length, 3, 'one upload control per trigger that picked Custom');
-assert.equal(customTree.children[0][2].children[0].length, 17, 'and the page grows by exactly those three rows');
+assert.equal(addInputs.length, 1, 'the library row owns the only file input');
+assert.equal(menuItemsOf(baseTree).length, 30, 'nine presets and Off, in three pickers, while the library is empty');
 
 const makeFile = (name, bytes, size = bytes.byteLength) => ({
 	name,
 	size,
 	arrayBuffer: async () => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
 });
-const uploadTo = async (input, file) => {
+const addTo = async (input, file) => {
 	const before = fetchCalls.length;
 	await input.props.onChange({ currentTarget: { files: [file], value: 'x' } });
 	return fetchCalls.slice(before);
 };
 
-// A decodable file under the cap: bytes go to the store, the config gets the
-// stored name, and the trigger starts using it.
+// Adding one clip: the bytes go to the store, the slot keeps the name.
 formWrites.length = 0;
-const decisionUploads = await uploadTo(fileInputs[0], makeFile('ring.mp3', new TextEncoder().encode('good-audio')));
-assert.equal(decisionUploads.filter((call) => String(call.input).startsWith('/notify-sounds/sound') && call.init?.method === 'POST').length, 1, 'the bytes are POSTed to the sound store');
-assert.deepEqual(
-	formWrites.filter((write) => write.field.startsWith('customDecision')),
-	[
-		{ field: 'customDecisionFile', value: 'a'.repeat(64) + '.mp3' },
-		{ field: 'customDecisionName', value: 'ring.mp3' },
-	],
-	'the config keeps the stored name and the original name, not the bytes',
+const added = await addTo(addInputs[0], makeFile('ring.mp3', new TextEncoder().encode('good-audio')));
+assert.equal(
+	added.filter((call) => String(call.input).startsWith('/notify-sounds/sound') && call.init?.method === 'POST').length,
+	1,
+	'the bytes are POSTed to the sound store',
 );
-assert.ok(!formWrites.some((write) => write.field === 'decisionSound'), 'a trigger already on Custom is not rewritten');
-
-// The same bytes for another trigger: the store answers with the same name,
-// and the two slots share one file.
-formWrites.length = 0;
-await uploadTo(fileInputs[2], makeFile('ring.mp3', new TextEncoder().encode('good-audio')));
 assert.deepEqual(
-	formWrites.filter((write) => write.field.startsWith('customCompletion')),
+	formWrites.filter((write) => write.field.startsWith('custom1')),
 	[
-		{ field: 'customCompletionFile', value: 'a'.repeat(64) + '.mp3' },
-		{ field: 'customCompletionName', value: 'ring.mp3' },
+		{ field: 'custom1File', value: 'a'.repeat(64) + '.mp3' },
+		{ field: 'custom1Name', value: 'ring' },
 	],
-	'a second trigger stores its own reference to the same file',
+	'the clip lands in the first slot, named after the file without its extension',
 );
 
-// A trigger that still holds a file but moved its picker away switches back
-// when a new file is chosen: the upload is the intent.
-form.value = { ...baseValue(), decisionSound: 'bell', customDecisionFile: 'b'.repeat(64) + '.mp3', customDecisionName: 'old.mp3' };
-const backTree = renderTree(section.component({
-	useConfig: (selector) => selector(form.getSnapshot()),
-	setField: injected.setField,
-	preview: injected.preview,
-	previewSlot: injected.previewSlot,
-	uploadSound: injected.uploadSound,
-	removeSound: injected.removeSound,
-	t: (key) => key,
-}));
-const backInputs = [];
-walkElements(backTree, (element) => {
-	if (element.type === 'input' && element.props.type === 'file') backInputs.push(element);
+// It shows up in every picker under that name.
+const filledTree = renderSection();
+const filledItems = menuItemsOf(filledTree);
+assert.equal(filledItems.length, 33, 'the clip adds one entry to each picker');
+const customEntry = filledItems.find((element) => element.props['data-menu-item'] === 'custom1');
+assert.ok(customEntry, 'the clip is offered by slot id');
+assert.equal(customEntry.children[0], 'ring', 'and labelled with the name the user can change');
+
+// A trigger choosing it plays the stored file.
+form.value = { ...form.value, decisionSound: 'custom1' };
+scheduled.length = 0;
+publish([['lib1', { running: true, pendingInteraction: { kind: 'approval', displayReason: '允许执行命令' } }]]);
+await new Promise((resolve) => {
+	setTimeout(resolve, 10);
 });
-assert.equal(backInputs.length, 1, 'a stored file keeps its row visible even when the picker moved away');
+assert.ok(scheduled.some((node) => node.buffer !== undefined), 'a trigger on a library clip plays through a buffer source');
+
+// Renaming commits on blur, and only when it actually changed.
 formWrites.length = 0;
-await uploadTo(backInputs[0], makeFile('new.mp3', new TextEncoder().encode('good-audio')));
-assert.ok(formWrites.some((write) => write.field === 'decisionSound' && write.value === 'custom'), 'choosing a file switches the picker back to Custom');
-form.value = { ...baseValue(), decisionSound: 'custom', questionSound: 'custom', completionSound: 'custom' };
+const namedTree = renderSection();
+let nameField;
+walkElements(namedTree, (element) => {
+	if (element.type === 'input' && element.props.type === 'text' && element.props['aria-label'] === 'custom.rename') nameField = element;
+});
+assert.ok(nameField, 'each clip exposes an editable name');
+assert.equal(nameField.props.defaultValue, 'ring', 'prefilled with the current name');
+nameField.props.onBlur({ currentTarget: { value: '  门铃声  ' } });
+assert.deepEqual(formWrites.filter((write) => write.field === 'custom1Name'), [{ field: 'custom1Name', value: '门铃声' }], 'a blurred name commits, trimmed');
+formWrites.length = 0;
+nameField.props.onBlur({ currentTarget: { value: '   ' } });
+assert.equal(formWrites.length, 0, 'an empty name is ignored rather than written');
 
-// An oversized file is refused before anything is sent or written.
-const writesBeforeBig = formWrites.length;
-const callsBeforeBig = fetchCalls.length;
-await uploadTo(fileInputs[0], makeFile('big.mp3', new Uint8Array(8), 4 * 1024 * 1024));
-assert.equal(formWrites.length, writesBeforeBig, 'an oversized file writes nothing');
-assert.equal(fetchCalls.length, callsBeforeBig, 'and never reaches the store');
+// The four refusals happen before anything is sent or written.
+for (const [file, label] of [
+	[makeFile('big.mp3', new Uint8Array(8), 4 * 1024 * 1024), 'oversized'],
+	[makeFile('bad.mp3', new TextEncoder().encode('not-audio')), 'undecodable'],
+	[makeFile('long.mp3', new TextEncoder().encode('long-audio')), 'over-long'],
+	[makeFile('silent.mp3', new TextEncoder().encode('silent-audio')), 'silent'],
+]) {
+	const writesBefore = formWrites.length;
+	const callsBefore = fetchCalls.length;
+	await addTo(addInputs[0], file);
+	assert.equal(formWrites.length, writesBefore, `an ${label} file writes nothing`);
+	assert.equal(fetchCalls.length, callsBefore, `an ${label} file never reaches the store`);
+}
 
-// Undecodable bytes are refused: accepting them would store a sound that can
-// never play.
-const writesBeforeBad = formWrites.length;
-await uploadTo(fileInputs[0], makeFile('bad.mp3', new TextEncoder().encode('not-audio')));
-assert.equal(formWrites.length, writesBeforeBad, 'an undecodable file writes nothing');
-
-// Longer than the cap is refused with the actual length in the message.
-const writesBeforeLong = formWrites.length;
-await uploadTo(fileInputs[0], makeFile('long.mp3', new TextEncoder().encode('long-audio')));
-assert.equal(formWrites.length, writesBeforeLong, 'an over-long file writes nothing');
-
-// A file that decodes but carries no signal is refused: it would "succeed"
-// and then never make a sound.
-const writesBeforeSilent = formWrites.length;
-await uploadTo(fileInputs[0], makeFile('silent.mp3', new TextEncoder().encode('silent-audio')));
-assert.equal(formWrites.length, writesBeforeSilent, 'a silent file writes nothing');
-
-// Removing a slot clears its two fields, moves the picker off `custom`, and
-// asks the store to drop the file.
+// Three clips fill the library; the add button is disabled and the row says why.
 form.value = {
 	...baseValue(),
-	customDecisionFile: 'a'.repeat(64) + '.mp3',
-	customDecisionName: 'ring.mp3',
-	decisionSound: 'custom',
-	customQuestionFile: 'a'.repeat(64) + '.mp3',
-	customQuestionName: 'ring.mp3',
-	questionSound: 'custom',
+	custom1File: 'a'.repeat(64) + '.mp3',
+	custom1Name: '一',
+	custom2File: 'b'.repeat(64) + '.mp3',
+	custom2Name: '二',
+	custom3File: 'c'.repeat(64) + '.mp3',
+	custom3Name: '三',
 };
-const getSlotRow = (key) => {
-	const currentTree = renderTree(section.component({
-		useConfig: (selector) => selector(form.getSnapshot()),
-		setField: injected.setField,
-		preview: injected.preview,
-		previewSlot: injected.previewSlot,
-		uploadSound: injected.uploadSound,
-		removeSound: injected.removeSound,
-		t: (key) => key,
-	}));
-	return currentTree.children[0][2].children[0].find((row) => row.props.key === key);
+const fullTree = renderSection();
+let addButton;
+walkElements(fullTree, (element) => {
+	if (element.type === 'Button' && element.children?.[0] === 'custom.add') addButton = element;
+});
+assert.ok(addButton, 'the add button is there');
+assert.equal(addButton.props.disabled, true, 'and disabled once three clips exist');
+let limitShown = false;
+walkElements(fullTree, (element) => {
+	if (element.children?.[0] === 'custom.limit') limitShown = true;
+});
+assert.ok(limitShown, 'the row explains the limit');
+
+// Removing a clip clears its slot, moves the trigger off it, and deletes the
+// file once nothing references it.
+form.value = {
+	...baseValue(),
+	custom1File: 'a'.repeat(64) + '.mp3',
+	custom1Name: 'ring',
+	decisionSound: 'custom1',
+	custom2File: 'a'.repeat(64) + '.mp3',
+	custom2Name: 'same file',
 };
+const removeTree = renderSection();
+let removeButton;
+walkElements(removeTree, (element) => {
+	if (element.type === 'Button' && element.children?.[0] === 'custom.remove') {
+		removeButton = removeButton ?? element;
+	}
+});
+assert.ok(removeButton, 'each clip has a remove action');
 formWrites.length = 0;
 const callsBeforeRemove = fetchCalls.length;
-await getSlotRow('decision-file').props.onRemove();
+await removeButton.props.onClick();
 assert.deepEqual(
-	formWrites.filter((write) => write.field.startsWith('customDecision')),
+	formWrites.filter((write) => write.field.startsWith('custom1')),
 	[
-		{ field: 'customDecisionFile', value: '' },
-		{ field: 'customDecisionName', value: '' },
+		{ field: 'custom1File', value: '' },
+		{ field: 'custom1Name', value: '' },
 	],
-	'removing clears the stored name and the display name',
+	'removing clears the slot',
 );
-assert.ok(formWrites.some((write) => write.field === 'decisionSound' && write.value === 'bell'), 'and moves that trigger back to its default preset');
+assert.ok(formWrites.some((write) => write.field === 'decisionSound' && write.value === 'bell'), 'and moves the trigger back to its preset');
 assert.equal(
 	fetchCalls.slice(callsBeforeRemove).filter((call) => call.init?.method === 'DELETE').length,
 	0,
-	'a file the other trigger still uses is not deleted',
+	'a file the other slot still uses is not deleted',
 );
 
-// The last reference going away does delete it.
 form.value = {
 	...baseValue(),
-	customDecisionFile: 'a'.repeat(64) + '.mp3',
-	customDecisionName: 'ring.mp3',
-	decisionSound: 'custom',
-	customQuestionFile: '',
-	customQuestionName: '',
-	questionSound: 'chime',
+	custom1File: 'a'.repeat(64) + '.mp3',
+	custom1Name: 'ring',
+	decisionSound: 'custom1',
 };
+const lastTree = renderSection();
+let lastRemove;
+walkElements(lastTree, (element) => {
+	if (element.type === 'Button' && element.children?.[0] === 'custom.remove') lastRemove = lastRemove ?? element;
+});
 const callsBeforeDelete = fetchCalls.length;
-await getSlotRow('decision-file').props.onRemove();
+await lastRemove.props.onClick();
 assert.equal(
 	fetchCalls.slice(callsBeforeDelete).filter((call) => call.init?.method === 'DELETE').length,
 	1,
 	'the last reference deletes the stored file',
 );
 
-// A stored name whose file is gone is checked with a HEAD, not a download.
-// (The row's rendered message cannot be asserted here: this harness renders
-// once and its `useState` does not re-render, so only the request and the
-// copy behind it are pinned.)
+// A clip no trigger uses says so, so an added-but-forgotten recording is visible.
+form.value = { ...baseValue(), custom1File: 'a'.repeat(64) + '.mp3', custom1Name: 'ring' };
+const unusedTree = renderSection();
+let unusedShown = false;
+walkElements(unusedTree, (element) => {
+	if (element.children?.[0] === 'custom.unused') unusedShown = true;
+});
+assert.ok(unusedShown, 'an unused clip is marked as such');
+
+// A clip whose file is gone is checked with a HEAD and reported.
 soundMissing = true;
-form.value = { ...baseValue(), customDecisionFile: 'a'.repeat(64) + '.mp3', customDecisionName: 'ring.mp3' };
-renderTree(section.component({
-	useConfig: (selector) => selector(form.getSnapshot()),
-	setField: injected.setField,
-	preview: injected.preview,
-	previewSlot: injected.previewSlot,
-	uploadSound: injected.uploadSound,
-	removeSound: injected.removeSound,
-	t: (key) => key,
-}));
+const missingTree = renderSection();
 flushEffects();
 await new Promise((resolve) => {
 	setTimeout(resolve, 0);
@@ -1326,7 +1341,6 @@ await new Promise((resolve) => {
 assert.ok(fetchCalls.some((call) => call.init?.method === 'HEAD'), 'the check is a HEAD, not a download');
 assert.ok(localeRegistrations[0].dicts.zh['custom.missing'] && localeRegistrations[0].dicts.en['custom.missing'], 'and the row has copy to show when it 404s');
 soundMissing = false;
-
 
 // A write through the section's setField reaches the form.
 await injected.setField('volume', 42);
