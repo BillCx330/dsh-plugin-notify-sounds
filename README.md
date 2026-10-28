@@ -16,7 +16,7 @@ Walk away from the window without missing anything: an OS notification in the ba
 **Install**: DSH → **Plugins** in the left sidebar → Add plugin, paste the line below (keep the version — a release younger than 24 hours is resolved back to the previous one by pnpm's `minimumReleaseAge`) and press **Install**:
 
 ```
-dsh-plugin-notify-sounds@1.9.0
+dsh-plugin-notify-sounds@1.10.0
 ```
 
 ---
@@ -35,7 +35,7 @@ Every visual detail of the settings section comes from DSH's own design system: 
 | **Missed it? It reminds again** | Unanswered decisions re-ping every 1/5/15/30 minutes — and **stop for good once you have seen them**, even if you switch away again |
 | **Only what you care about** | Sub-agents (background tasks) are completely silent by default — only your own conversation is announced |
 | **Quiet when it should be** | Quiet hours (e.g. 22:00–08:00, wrapping past midnight), notify-only-when-hidden, and a master switch |
-| **Your sound, your way** | Nine built-in sounds; **up to three of your own clips**, each named and assignable to any alert (mp3 / wav / ogg / m4a, up to 15s each); volume — each feature with its own toggle |
+| **Your sound, your way** | Nine built-in sounds, levelled to each other; **up to three of your own clips**, named and assignable to any alert (mp3 / wav / ogg / m4a, up to 15s each); volume and a boost switch — each feature with its own toggle |
 | **Update checks** | Checks npm for a newer version and points at the route that installs it — the **Plugins** panel in the sidebar (uninstall, then add again), the marketplace, or `dsh plugin add` on a web profile; the row also flags an install the profile's lockfile does not match |
 
 ## 💡 Why
@@ -48,13 +48,13 @@ This plugin turns "it is waiting for you" and "it is done" into sound. With syst
 
 Bell · Chime · Ding · Drop · Pulse · Arc · Coin · Success · Knock — nine built-in sounds, all synthesized live with Web Audio: no audio files, no network requests.
 
-Or upload your own ringtone (mp3/wav/ogg, ≤512KB, validated and volume-normalized automatically), or pick "None" for notifications only. Each trigger (approval / question / completion) gets its own sound, with preview right in the settings.
+Or upload your own audio (mp3 / wav / ogg / m4a, up to 15s and 3MB each, validated and loudness-normalized), or pick "None" for notifications only. Each trigger (approval / question / completion) gets its own sound, with preview right in the settings.
 
 ## ⚙️ Settings
 
 Settings → **Sounds** (between General and Models). Every feature has its own toggle, styled exactly like DSH's own preference pages:
 
-master switch and volume · per-trigger sounds with preview · sub-agent alerts · system notifications · window title alert · repeat interval · quiet hours · hidden-only mode · up to three named clips of your own · update checks (installs go through the package manager)
+master switch and volume (with boost) · per-trigger sounds with preview · sub-agent alerts · system notifications · window title alert · repeat interval · quiet hours · hidden-only mode · up to three named clips of your own · update checks (installs go through the package manager)
 
 Everything applies immediately — no restart needed.
 
@@ -66,7 +66,7 @@ Everything applies immediately — no restart needed.
 2. Paste the package name **with a version** (this plugin is published on [npm](https://www.npmjs.com/package/dsh-plugin-notify-sounds)):
 
    ```
-   dsh-plugin-notify-sounds@1.9.0
+   dsh-plugin-notify-sounds@1.10.0
    ```
 
    Do not drop the version: pnpm's `minimumReleaseAge` policy keeps a release younger than 24 hours out of automatic resolution, so the bare name resolves to the previous one. The current version is on [npm](https://www.npmjs.com/package/dsh-plugin-notify-sounds?activeTab=versions) and in [Releases](https://github.com/BillCx330/dsh-plugin-notify-sounds/releases).
@@ -100,7 +100,7 @@ dsh plugin --profile <your profile> add github:BillCx330/dsh-plugin-notify-sound
 **Release archive** — download the `.tgz` from [Releases](https://github.com/BillCx330/dsh-plugin-notify-sounds/releases) and install it by its **path on disk**:
 
 ```sh
-dsh plugin --profile <your profile> add ./dsh-plugin-notify-sounds-1.9.0.tgz
+dsh plugin --profile <your profile> add ./dsh-plugin-notify-sounds-1.10.0.tgz
 ```
 
 (`dsh plugin add` hands its argument straight to the package manager, so it takes a local file path — a download URL will not work.)
