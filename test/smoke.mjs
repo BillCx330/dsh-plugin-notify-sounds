@@ -596,6 +596,8 @@ currentPanel = openPanel.panel;
 formWrites.length = 0;
 form.value = {
 	...baseValue(),
+	volume: 80,
+	volumeRev: 0,
 	decisionSound: 'custom',
 	customDecisionFile: 'b'.repeat(64) + '.mp3',
 	customDecisionName: 'decision.mp3',
@@ -623,6 +625,8 @@ assert.ok(formWrites.some((write) => write.field === 'decisionSound' && write.va
 assert.ok(formWrites.some((write) => write.field === 'completionSound' && write.value === 'custom2'), 'the trigger that used the inline payload points at its slot');
 assert.deepEqual(fieldWrites('customDecisionFile'), [''], 'the old per-trigger reference is cleared once its slot is written');
 assert.deepEqual(fieldWrites('customSound'), [''], 'the inline payload is cleared only after the store accepted it');
+assert.deepEqual(fieldWrites('volumeRev'), [1], 'the loudness scale is marked as migrated');
+assert.deepEqual(fieldWrites('volume'), [40], 'and the stored volume is halved, so the new scale only lands a few dB louder');
 form.value = baseValue();
 
 // --- Assertions: registration -------------------------------------------------
@@ -761,9 +765,9 @@ assert.equal(labelElement.host.textContent, '42%', 'dragging updates the label t
 
 // Committing fires once per gesture: pointer-up, then the blur that follows.
 dragInput.props.onPointerUp();
-assert.deepEqual(formWrites.filter((write) => write.field === 'volume'), [{ field: 'volume', value: 42 }], 'the gesture committed once');
+assert.deepEqual(formWrites.filter((write) => write.field === 'volume').at(-1), { field: 'volume', value: 42 }, 'the gesture committed once');
 dragInput.props.onBlur();
-assert.deepEqual(formWrites.filter((write) => write.field === 'volume'), [{ field: 'volume', value: 42 }], 'the following blur does not double-write');
+assert.equal(formWrites.filter((write) => write.field === 'volume').length, 2, 'the following blur does not double-write');
 
 // --- Assertions: switch write path ----------------------------------------------
 // The master switch writes through the form; its busy guard resolves the
