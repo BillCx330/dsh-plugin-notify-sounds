@@ -16,7 +16,7 @@ Walk away from the window without missing anything: an OS notification in the ba
 **Install**: DSH → **Plugins** in the left sidebar → Add plugin, paste the line below (keep the version — a release younger than 24 hours is resolved back to the previous one by pnpm's `minimumReleaseAge`) and press **Install**:
 
 ```
-dsh-plugin-notify-sounds@1.10.0
+dsh-plugin-notify-sounds@1.9.1
 ```
 
 ---
@@ -35,7 +35,7 @@ Every visual detail of the settings section comes from DSH's own design system: 
 | **Missed it? It reminds again** | Unanswered decisions re-ping every 1/5/15/30 minutes — and **stop for good once you have seen them**, even if you switch away again |
 | **Only what you care about** | Sub-agents (background tasks) are completely silent by default — only your own conversation is announced |
 | **Quiet when it should be** | Quiet hours (e.g. 22:00–08:00, wrapping past midnight), notify-only-when-hidden, and a master switch |
-| **Your sound, your way** | Nine built-in sounds, levelled to each other; **up to three of your own clips**, named and assignable to any alert (mp3 / wav / ogg / m4a, up to 15s each); volume and a boost switch — each feature with its own toggle |
+| **Your sound, your way** | Nine built-in sounds, levelled to each other; **up to three of your own clips**, named and assignable to any alert (mp3 / wav / ogg / m4a, up to 15s each); volume — each feature with its own toggle |
 | **Update checks** | Checks npm for a newer version and points at the route that installs it — the **Plugins** panel in the sidebar (uninstall, then add again), the marketplace, or `dsh plugin add` on a web profile; the row also flags an install the profile's lockfile does not match |
 
 ## 💡 Why
@@ -54,7 +54,7 @@ Or upload your own audio (mp3 / wav / ogg / m4a, up to 15s and 3MB each, validat
 
 Settings → **Sounds** (between General and Models). Every feature has its own toggle, styled exactly like DSH's own preference pages:
 
-master switch and volume (with boost) · per-trigger sounds with preview · sub-agent alerts · system notifications · window title alert · repeat interval · quiet hours · hidden-only mode · up to three named clips of your own · update checks (installs go through the package manager)
+master switch and volume · per-trigger sounds with preview · sub-agent alerts · system notifications · window title alert · repeat interval · quiet hours · hidden-only mode · up to three named clips of your own · update checks (installs go through the package manager)
 
 Everything applies immediately — no restart needed.
 
@@ -66,7 +66,7 @@ Everything applies immediately — no restart needed.
 2. Paste the package name **with a version** (this plugin is published on [npm](https://www.npmjs.com/package/dsh-plugin-notify-sounds)):
 
    ```
-   dsh-plugin-notify-sounds@1.10.0
+   dsh-plugin-notify-sounds@1.9.1
    ```
 
    Do not drop the version: pnpm's `minimumReleaseAge` policy keeps a release younger than 24 hours out of automatic resolution, so the bare name resolves to the previous one. The current version is on [npm](https://www.npmjs.com/package/dsh-plugin-notify-sounds?activeTab=versions) and in [Releases](https://github.com/BillCx330/dsh-plugin-notify-sounds/releases).
@@ -100,7 +100,7 @@ dsh plugin --profile <your profile> add github:BillCx330/dsh-plugin-notify-sound
 **Release archive** — download the `.tgz` from [Releases](https://github.com/BillCx330/dsh-plugin-notify-sounds/releases) and install it by its **path on disk**:
 
 ```sh
-dsh plugin --profile <your profile> add ./dsh-plugin-notify-sounds-1.10.0.tgz
+dsh plugin --profile <your profile> add ./dsh-plugin-notify-sounds-1.9.1.tgz
 ```
 
 (`dsh plugin add` hands its argument straight to the package manager, so it takes a local file path — a download URL will not work.)
@@ -145,6 +145,7 @@ For anyone hacking on the code (exact details live in the source comments):
 
 ## 📜 Changelog
 
+- **v1.9.1** (2026-10-29) **Fixed "too quiet": the nine presets are now levelled by loudness, not by peak.** A user reported that even 100% was quiet. Two things were stacked: the presets had never been matched to each other (`coin` peaks at 0.105, `ding` at 0.315 — 9.5 dB apart), and all of them sat about 12 dB below a decoded clip (a preset played at -16 dBFS at 100%, an imported file at -4). The same slider number meant two loudnesses. The first cut levelled them by peak, which made the coin sound louder still: a square carries 3 dB more energy than a sine at the same peak (RMS/peak 1.0 vs 0.707). Levels now use a crest-corrected peak — sines and squares land on the same energy, and triangles are capped at the ceiling rather than pushed past it. The same number is about 12 dB louder, and the nine sounds agree with each other. **Upgrade note**: if you lowered the volume to suit the old release, set it again once.
 - **v1.9.0** (2026-10-27) **Your own sounds become a small library: three at most, each renameable and assignable.** All three alerts used to share a single "Custom" upload, so giving "finished" its own sound while "approval needed" kept a preset was impossible. The "Custom sound" row now holds everything: press **Add audio**, and the file is listed underneath (three at most) where it can be renamed, previewed or removed; the three alert pickers list your sounds by name, so each alert plays the one you point it at. **The bytes moved out of the config**: a 512KB clip used to become 699,052 characters of base64 inside `cordis.patch.yml` — 277× the whole file, rewritten on every settings change — so audio is now stored under `profiles/<profile>/notify-sounds/sounds/<hash>.<ext>` with only the name in the config. Three gaps closed as well: **3MB and 15 seconds per sound** (a long clip turns an alert into background music and can cost tens of MB once decoded); **silent and near-zero-length files are refused at upload**; and **anything unreadable falls back to that alert's default sound** — a damaged payload used to silence all three with nothing in the UI to explain it. The list marks a file that has gone missing, and one no alert uses yet. Existing audio from an older release is moved into the library on first run; if that fails it stays where it was and keeps playing.
 - **v1.8.6** (2026-10-23) **A full audit, paid off — no new features.** Fixed: with goal-only alerting on, turning the switch **off** while the watcher waited still produced the chime it was holding at the end of the goal (the watcher now re-reads the preference); the update check cached a FAILURE for the full day, so one network blip left the row reading "check failed" until tomorrow (failures are now cached for a minute, and the row no longer blames the network — it says neither source returned a usable answer); a `pnpm-lock.yaml` key carrying a peer suffix (`pkg@1.8.4(@scope/peer@3.18.4)`) was read as a version, which flagged a perfectly good install as unregistered and told the user to reinstall it; an unreadable current version rendered as "This version ? · Up to date", which is now its own message; the repeat-interval control displayed a hand-edited 7 as "5 min" while reminders fired every seven (display and timer now share one snap); identical quiet-hours bounds were silently treated as "no quiet" and the description now says so; the client's time parser accepted `9:05` while the Host schema rejected it (both are strict now); a custom-sound read failure was reported as "could not decode"; and one refused notification construction left the row permanently "unsupported" (a successful one now clears it). **Update guidance**: on the Desktop the plugin manager is a **sidebar panel named Plugins**, not "Settings → Plugins" — 1.8.5 got that wrong; every install command now pins the version (it rendered as `@v1.8.5`, and the display prefix does not belong in a command a package manager parses), and the copy explains that a release younger than pnpm's `minimumReleaseAge` window resolves back to the previous one. **Cleanup**: removed the 527-line unreachable self-installer from 1.8.0 (the Host file drops from 1553 to 1023 lines, along with 10 imports that existed only for it), the update notice that could never render, eight dead dictionary keys, and the tests that pinned the dead code; all three route paths are now cross-checked between the halves (`/notify-sounds/goal` was missing, and it is the one that has already drifted once). The README's "multiple windows fire independently" claim contradicted the speaking-page election shipped in 1.7.0 and is corrected.
 - **v1.8.5** (2026-10-20) **The wording catches up with the mechanism.** The update row still said a newer version could be installed "in one click" — it cannot since 1.8.0: the row only checks and points at the package manager. The row now says exactly that, and its in-app guidance carries the version (`dsh-plugin-notify-sounds@{version}`) so a fresh release is not silently resolved to the previous one by pnpm's `minimumReleaseAge` policy. The README feature table, settings summary and install step no longer promise one-click installs; historical changelog entries are left untouched.

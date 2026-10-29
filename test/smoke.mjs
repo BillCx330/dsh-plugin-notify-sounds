@@ -55,8 +55,6 @@ globalThis.window = {
 
 // Recording AudioContext mock: every scheduled oscillator is captured.
 const scheduled = [];
-/** Compressors the boost path asked for. */
-const limiters = [];
 class MockParam {
 	constructor() {
 		this.events = [];
@@ -140,16 +138,6 @@ globalThis.window.AudioContext = class {
 	}
 	createBufferSource() {
 		return new MockBufferSource();
-	}
-	createDynamicsCompressor() {
-		const node = new MockNode();
-		node.threshold = { value: 0 };
-		node.knee = { value: 0 };
-		node.ratio = { value: 0 };
-		node.attack = { value: 0 };
-		node.release = { value: 0 };
-		limiters.push(node);
-		return node;
 	}
 	decodeAudioData(bytes) {
 		// Decodes only the sentinel payload; anything else is undecodable.
@@ -737,10 +725,10 @@ assert.equal(tree.children[0].length, 3, 'title, intro, rows');
 assert.equal(tree.children[0][0].type, 'h2', 'the title is a heading like the shipped sections');
 assert.equal(tree.children[0][1].type, 'p', 'the intro is a paragraph');
 const rows = tree.children[0][2].children[0].filter(Boolean);
-assert.equal(rows.length, 16, 'sixteen rows render: volume, boost and the sound library');
+assert.equal(rows.length, 15, 'fifteen rows render: the custom-sound row is always there');
 assert.deepEqual(
 	rows.map((row) => row.props.key),
-	['enabled', 'volume', 'decision', 'question', 'completion', 'boost', 'custom', 'subagent', 'goalFinalOnly', 'systemNotify', 'titleFlash', 'renotify', 'quiet', 'onlyWhenHidden', 'updateAutoCheck', 'update'],
+	['enabled', 'volume', 'decision', 'question', 'completion', 'custom', 'subagent', 'goalFinalOnly', 'systemNotify', 'titleFlash', 'renotify', 'quiet', 'onlyWhenHidden', 'updateAutoCheck', 'update'],
 	'row order: master switch, volume, the three triggers, the custom-sound library row, then sub-agent scope, goal final-round scope, notification, title flash, repeat reminder, quiet hours, hidden-only, the auto-check toggle and the update row',
 );
 
@@ -1298,19 +1286,33 @@ const levelled = Object.entries(exports.SOUND_PRESETS).map(([id, preset]) => {
 	}
 	return top * exports.PRESET_LEVEL[id];
 });
-assert.ok(Math.max(...levelled) - Math.min(...levelled) < 0.02, 'all nine presets land on the same peak');
-assert.ok(Math.abs(levelled[0] - 0.95) < 0.02, 'and that peak is the intended level');
+assert.ok(levelled.every((peak) => peak <= 0.96), 'no preset is driven past the ceiling');
 
-// The boost switch doubles the master gain and puts a limiter in the path;
-// unboosted playback stays on the direct path, where nothing colours it.
-form.value = { ...form.value, boost: true };
-limiters.length = 0;
-injected.preview('bell', 100);
-assert.equal(limiters.length, 1, 'boost routes playback through a limiter');
-form.value = { ...form.value, boost: false };
-limiters.length = 0;
-injected.preview('bell', 100);
-assert.equal(limiters.length, 0, 'unboosted playback stays direct');
+// Peak was the wrong yardstick: a square carries 3 dB more energy at the same
+// peak, which is why 金币 read as louder than 完成. The correction is checked
+// by comparing energy, not peaks.
+const rmsRatio = (preset) => Math.max(...preset.notes.map((note) => ({
+	sine: Math.SQRT1_2,
+	triangle: Math.sqrt(1 / 3),
+	square: 1,
+}[note.type ?? 'sine'])));
+const energies = Object.entries(exports.SOUND_PRESETS).map(([id, preset]) => ({
+	id,
+	peak: (() => {
+		let top = 0;
+		for (let t = 0; t < 2; t += 0.002) {
+			let sum = 0;
+			for (const note of preset.notes) sum += envelopeAt(note, t);
+			if (sum > top) top = sum;
+		}
+		return top * exports.PRESET_LEVEL[id];
+	})(),
+}));
+for (const row of energies) row.rms = row.peak * rmsRatio(exports.SOUND_PRESETS[row.id]);
+const coin = energies.find((row) => row.id === 'coin');
+const ding = energies.find((row) => row.id === 'ding');
+assert.ok(Math.abs(20 * Math.log10(coin.rms / ding.rms)) < 1, 'a square preset lands at the same energy as a sine one');
+assert.ok(coin.peak < ding.peak - 0.1, 'and it gets there with a lower peak, because the square already carries more');
 
 // A trigger choosing it plays the stored file.
 form.value = { ...form.value, decisionSound: 'custom1' };
