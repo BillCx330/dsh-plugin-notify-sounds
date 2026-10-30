@@ -1102,6 +1102,19 @@ publish([['s14', { running: false }]]);
 assert.equal(notifications.length, 1, 'the completion toast still fires');
 assert.equal(notifications[0].title, '发布 1.9.2', 'with the conversation name');
 assert.equal(notifications[0].options.body, '智能体已完成当前任务', 'and the completion sentence unchanged');
+
+// DSH names some sessions after their working directory ("Working directory:
+// C://…"). That is a path, not a name — it says no more than the folder and
+// would put the path on the lock screen — so only the last segment is shown.
+sessionRowsById.s15 = {
+	origin: 'main',
+	cwd: 'C:////work////demo',
+	title: 'Working directory: C:////work////demo',
+	displayTitle: 'Working directory: C:////work////demo',
+};
+notifications.length = 0;
+publish([['s15', { running: true, pendingInteraction: { kind: 'approval', displayReason: '允许执行命令' } }]]);
+assert.equal(notifications[0].title, 'demo', 'a working-directory title is replaced by the folder name');
 // The click posts to the Host focus route and says nothing about it: the
 // window coming back IS the feedback.
 assert.equal(notifications.length, 1, 'a click raises no follow-up notification');
