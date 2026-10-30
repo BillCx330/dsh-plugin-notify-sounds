@@ -16,7 +16,7 @@ Walk away from the window without missing anything: an OS notification in the ba
 **Install**: DSH → **Plugins** in the left sidebar → Add plugin, paste the line below (keep the version — a release younger than 24 hours is resolved back to the previous one by pnpm's `minimumReleaseAge`) and press **Install**:
 
 ```
-dsh-plugin-notify-sounds@1.9.1
+dsh-plugin-notify-sounds@1.9.2
 ```
 
 ---
@@ -66,7 +66,7 @@ Everything applies immediately — no restart needed.
 2. Paste the package name **with a version** (this plugin is published on [npm](https://www.npmjs.com/package/dsh-plugin-notify-sounds)):
 
    ```
-   dsh-plugin-notify-sounds@1.9.1
+   dsh-plugin-notify-sounds@1.9.2
    ```
 
    Do not drop the version: pnpm's `minimumReleaseAge` policy keeps a release younger than 24 hours out of automatic resolution, so the bare name resolves to the previous one. The current version is on [npm](https://www.npmjs.com/package/dsh-plugin-notify-sounds?activeTab=versions) and in [Releases](https://github.com/BillCx330/dsh-plugin-notify-sounds/releases).
@@ -100,7 +100,7 @@ dsh plugin --profile <your profile> add github:BillCx330/dsh-plugin-notify-sound
 **Release archive** — download the `.tgz` from [Releases](https://github.com/BillCx330/dsh-plugin-notify-sounds/releases) and install it by its **path on disk**:
 
 ```sh
-dsh plugin --profile <your profile> add ./dsh-plugin-notify-sounds-1.9.1.tgz
+dsh plugin --profile <your profile> add ./dsh-plugin-notify-sounds-1.9.2.tgz
 ```
 
 (`dsh plugin add` hands its argument straight to the package manager, so it takes a local file path — a download URL will not work.)

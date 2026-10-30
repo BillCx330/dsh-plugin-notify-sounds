@@ -1058,6 +1058,50 @@ notifications[0].onclick();
 assert.equal(fetchCalls.length, 1, 'the notification click posts to the focus route');
 assert.equal(fetchCalls[0].input, '/notify-sounds/focus', 'the focus route path matches the Host half');
 assert.equal(fetchCalls[0].init.method, 'POST', 'the focus request is a POST');
+
+// The toast names the conversation, so several open chats can be told apart
+// without reading the body. (The harness's `t` returns the key, so copy is
+// checked at the dictionary level below.)
+sessionRowsById.s10 = { origin: 'main', title: '重构设置页' };
+notifications.length = 0;
+publish([['s10', { running: true, pendingInteraction: { kind: 'approval', displayReason: '允许执行命令' } }]]);
+assert.equal(notifications.length, 1, 'a titled session still raises one notification');
+assert.equal(notifications[0].title, '重构设置页', 'the title is the conversation name, not the event');
+assert.equal(notifications[0].options.body, '需要你的决策：允许执行命令', 'and the body switches to the event-prefixed wording');
+assert.ok(
+	localeRegistrations[0].dicts.zh['notify.decision.event'].includes('{detail}')
+	&& localeRegistrations[0].dicts.en['notify.decision.event'].includes('{detail}'),
+	'whose copy interpolates the detail',
+);
+
+// No persisted title: the workspace folder is still better than a raw id.
+sessionRowsById.s11 = { origin: 'main', displayTitle: 'default-workspace' };
+notifications.length = 0;
+publish([['s11', { running: true, pendingInteraction: { kind: 'approval', displayReason: '允许执行命令' } }]]);
+assert.equal(notifications[0].title, 'default-workspace', 'an untitled session falls back to the folder name');
+
+// Neither one: keep the event title and the plain body — never the session id.
+sessionRowsById.s12 = { origin: 'main', displayTitle: 's12' };
+notifications.length = 0;
+publish([['s12', { running: true, pendingInteraction: { kind: 'approval', displayReason: '允许执行命令' } }]]);
+assert.equal(notifications[0].title, '需要你的决策', 'without a name the event keeps the title');
+assert.equal(notifications[0].options.body, '允许执行命令', 'and the body stays plain');
+
+// Long titles are trimmed so the event is never pushed off a Windows toast.
+sessionRowsById.s13 = { origin: 'main', title: '一'.repeat(60) };
+notifications.length = 0;
+publish([['s13', { running: true, pendingInteraction: { kind: 'approval', displayReason: '允许执行命令' } }]]);
+assert.equal(notifications[0].title.length, 48, 'a long title is clamped to 48 characters');
+assert.ok(notifications[0].title.endsWith('…'), 'and marked as trimmed');
+
+// Completion keeps its own sentence; only the title changes.
+sessionRowsById.s14 = { origin: 'main', title: '发布 1.9.2' };
+notifications.length = 0;
+publish([['s14', { running: true }]]);
+publish([['s14', { running: false }]]);
+assert.equal(notifications.length, 1, 'the completion toast still fires');
+assert.equal(notifications[0].title, '发布 1.9.2', 'with the conversation name');
+assert.equal(notifications[0].options.body, '智能体已完成当前任务', 'and the completion sentence unchanged');
 // The click posts to the Host focus route and says nothing about it: the
 // window coming back IS the feedback.
 assert.equal(notifications.length, 1, 'a click raises no follow-up notification');

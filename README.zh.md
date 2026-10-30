@@ -16,7 +16,7 @@
 **安装**：DSH → 左侧栏「插件」→ 添加插件，粘贴下面这行（**带上版本号**，否则发布不满 24 小时的版本会被 pnpm 的 `minimumReleaseAge` 解析回上一版），点「安装」：
 
 ```
-dsh-plugin-notify-sounds@1.9.1
+dsh-plugin-notify-sounds@1.9.2
 ```
 
 ---
@@ -66,7 +66,7 @@ DSH 的状态提示只有视觉——状态点、侧栏标记。你一切到别�
 2. 在输入框粘贴包名**和版本号**（本插件已发布在 [npm](https://www.npmjs.com/package/dsh-plugin-notify-sounds)）：
 
    ```
-   dsh-plugin-notify-sounds@1.9.1
+   dsh-plugin-notify-sounds@1.9.2
    ```
 
    版本号不要省：pnpm 的 `minimumReleaseAge` 策略会把刚发布不到 24 小时的版本挡在外面，只写包名会解析回上一个版本。想看最新版本号可到 [npm](https://www.npmjs.com/package/dsh-plugin-notify-sounds?activeTab=versions) 或 [Releases](https://github.com/BillCx330/dsh-plugin-notify-sounds/releases) 查。
@@ -100,7 +100,7 @@ dsh plugin --profile <你的 profile> add github:BillCx330/dsh-plugin-notify-sou
 **Release 压缩包** —— 从 [Releases](https://github.com/BillCx330/dsh-plugin-notify-sounds/releases) 下载 `.tgz`，用它**在磁盘上的路径**安装：
 
 ```sh
-dsh plugin --profile <你的 profile> add ./dsh-plugin-notify-sounds-1.9.1.tgz
+dsh plugin --profile <你的 profile> add ./dsh-plugin-notify-sounds-1.9.2.tgz
 ```
 
 （`dsh plugin add` 把参数原样交给包管理器，所以要给本地文件路径，不能填下载地址。）
