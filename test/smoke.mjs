@@ -1140,6 +1140,15 @@ sessionRowsById.s17 = { origin: 'main' };
 notifications.length = 0;
 publish([['s17', { running: true, pendingInteraction: { kind: 'approval', displayReason: '允许执行命令' } }]]);
 assert.equal(notifications.length, 0, 'a focused window stays quiet');
+
+// A first message pasted across several lines becomes the title; a toast
+// title is one line, so the breaks are collapsed instead of shown.
+focusState = false;
+notifications.length = 0;
+sessionRowsById.s18 = { origin: 'main', title: '第一行\n第二行\t第三行' };
+publish([['s18', { running: true, pendingInteraction: { kind: 'approval', displayReason: '允许执行命令' } }]]);
+assert.equal(notifications[0].title, '第一行 第二行 第三行', 'a multi-line title is flattened to one line');
+focusState = true;
 document.visibilityState = 'visible';
 form.value = { ...baseValue() };
 
