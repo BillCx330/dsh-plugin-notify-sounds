@@ -16,7 +16,7 @@ Walk away from the window without missing anything: an OS notification in the ba
 **Install**: DSH → **Plugins** in the left sidebar → Add plugin, paste the line below (keep the version — a release younger than 24 hours is resolved back to the previous one by pnpm's `minimumReleaseAge`) and press **Install**:
 
 ```
-dsh-plugin-notify-sounds@1.9.2
+dsh-plugin-notify-sounds@1.9.3
 ```
 
 ---
@@ -66,7 +66,7 @@ Everything applies immediately — no restart needed.
 2. Paste the package name **with a version** (this plugin is published on [npm](https://www.npmjs.com/package/dsh-plugin-notify-sounds)):
 
    ```
-   dsh-plugin-notify-sounds@1.9.2
+   dsh-plugin-notify-sounds@1.9.3
    ```
 
    Do not drop the version: pnpm's `minimumReleaseAge` policy keeps a release younger than 24 hours out of automatic resolution, so the bare name resolves to the previous one. The current version is on [npm](https://www.npmjs.com/package/dsh-plugin-notify-sounds?activeTab=versions) and in [Releases](https://github.com/BillCx330/dsh-plugin-notify-sounds/releases).
@@ -100,7 +100,7 @@ dsh plugin --profile <your profile> add github:BillCx330/dsh-plugin-notify-sound
 **Release archive** — download the `.tgz` from [Releases](https://github.com/BillCx330/dsh-plugin-notify-sounds/releases) and install it by its **path on disk**:
 
 ```sh
-dsh plugin --profile <your profile> add ./dsh-plugin-notify-sounds-1.9.2.tgz
+dsh plugin --profile <your profile> add ./dsh-plugin-notify-sounds-1.9.3.tgz
 ```
 
 (`dsh plugin add` hands its argument straight to the package manager, so it takes a local file path — a download URL will not work.)
@@ -145,6 +145,7 @@ For anyone hacking on the code (exact details live in the source comments):
 
 ## 📜 Changelog
 
+- **v1.9.3** (2026-11-02) **A visible-but-unfocused window now raises a system notification.** Notifications used to fire only while the page was hidden, but a window sitting in plain sight behind another app — or on a second screen while you type elsewhere — still reports `visible`, so that whole case was silent ([#5](https://github.com/BillCx330/dsh-plugin-notify-sounds/issues/5)). The gate is now "hidden **or** unfocused". Minimised, tray-hidden and fully covered windows behave as before (Chromium's occlusion tracking marks those hidden).
 - **v1.9.2** (2026-10-30) **System notifications are titled with the conversation name.** They used to read "Task finished / The agent has finished the current task", so with several conversations open you had to click through to learn which one. The title now carries the conversation's name (from the `title` already on DSH's session rows, falling back to the workspace folder — and treating DSH's own "Working directory: …" fallback as unnamed, so only the folder segment shows), and the body is unchanged; a decision toast prefixes its body with the event so nothing is lost. Titles are trimmed at 48 characters, an untitled session keeps the old wording, and a raw session id is never shown. These fields exist since DSH 0.2.0 — not a new API — and when they are missing the behaviour is exactly what it was. **One cross-platform fix came along**: on Windows two windows uploading the same clip at once made the second report "not audio" (415) — POSIX lets `rename` overwrite, Windows refuses — and that refusal is now treated as success. ([#4](https://github.com/BillCx330/dsh-plugin-notify-sounds/issues/4), thanks @AdySnowflake)
 - **v1.9.1** (2026-10-29) **Fixed "too quiet": the nine presets are now levelled by loudness, not by peak.** A user reported that even 100% was quiet. Two things were stacked: the presets had never been matched to each other (`coin` peaks at 0.105, `ding` at 0.315 — 9.5 dB apart), and all of them sat about 12 dB below a decoded clip (a preset played at -16 dBFS at 100%, an imported file at -4). The same slider number meant two loudnesses. The first cut levelled them by peak, which made the coin sound louder still: a square carries 3 dB more energy than a sine at the same peak (RMS/peak 1.0 vs 0.707). Levels now use a crest-corrected peak — sines and squares land on the same energy, and triangles are capped at the ceiling rather than pushed past it. The same number is about 12 dB louder, and the nine sounds agree with each other. **The saved volume is re-scaled once on upgrade**: at the new scale the same number is ~10 dB louder, so the stored value is halved (60 → 30, 100 → 50) — about 3.5 dB above where you were. Turn it up for the new headroom. ([#3](https://github.com/BillCx330/dsh-plugin-notify-sounds/issues/3), thanks @sink-er)
 - **v1.9.0** (2026-10-27) **Your own sounds become a small library: three at most, each renameable and assignable.** All three alerts used to share a single "Custom" upload, so giving "finished" its own sound while "approval needed" kept a preset was impossible. The "Custom sound" row now holds everything: press **Add audio**, and the file is listed underneath (three at most) where it can be renamed, previewed or removed; the three alert pickers list your sounds by name, so each alert plays the one you point it at. **The bytes moved out of the config**: a 512KB clip used to become 699,052 characters of base64 inside `cordis.patch.yml` — 277× the whole file, rewritten on every settings change — so audio is now stored under `profiles/<profile>/notify-sounds/sounds/<hash>.<ext>` with only the name in the config. Three gaps closed as well: **3MB and 15 seconds per sound** (a long clip turns an alert into background music and can cost tens of MB once decoded); **silent and near-zero-length files are refused at upload**; and **anything unreadable falls back to that alert's default sound** — a damaged payload used to silence all three with nothing in the UI to explain it. The list marks a file that has gone missing, and one no alert uses yet. Existing audio from an older release is moved into the library on first run; if that fails it stays where it was and keeps playing.

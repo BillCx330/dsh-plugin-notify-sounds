@@ -300,12 +300,15 @@ const documentListeners = {};
 // the title observer is genuinely attached while an alert is wanted. (A page
 // without one is the edge the observeTitle fix covers: the observer must not
 // be created until the element exists.)
+/** Whether the mocked page currently holds focus; the window-focus cases flip it. */
+let focusState = true;
 const titleElement = fakeNode('TITLE');
 globalThis.document = {
 	body: fakeNode('BODY'),
 	head: fakeNode('HEAD'),
 	activeElement: null,
 	visibilityState: 'visible',
+	hasFocus() { return focusState; },
 	title: '',
 	addEventListener(type, listener) {
 		(documentListeners[type] ??= []).push(listener);
@@ -1119,6 +1122,24 @@ assert.equal(notifications[0].title, 'demo', 'a working-directory title is repla
 // window coming back IS the feedback.
 assert.equal(notifications.length, 1, 'a click raises no follow-up notification');
 assert.equal(notifications[0].options.requireInteraction, undefined, 'toasts auto-dismiss');
+
+// A window in plain sight but unfocused counts as "away". This is the case
+// behind issue #5 ("only fires once DSH is in the background"): the window is
+// visible, so visibilityState says "visible" and the old gate stayed silent.
+form.value = { ...baseValue(), systemNotify: true };
+document.visibilityState = 'visible';
+focusState = false;
+sessionRowsById.s16 = { origin: 'main' };
+notifications.length = 0;
+publish([['s16', { running: true, pendingInteraction: { kind: 'approval', displayReason: '允许执行命令' } }]]);
+assert.equal(notifications.length, 1, 'a visible but unfocused window still raises a notification');
+
+// Focused and in front: no toast — the user is already looking at it.
+focusState = true;
+sessionRowsById.s17 = { origin: 'main' };
+notifications.length = 0;
+publish([['s17', { running: true, pendingInteraction: { kind: 'approval', displayReason: '允许执行命令' } }]]);
+assert.equal(notifications.length, 0, 'a focused window stays quiet');
 document.visibilityState = 'visible';
 form.value = { ...baseValue() };
 
