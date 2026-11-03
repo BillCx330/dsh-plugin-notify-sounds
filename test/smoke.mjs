@@ -1059,8 +1059,16 @@ assert.equal(scheduled.length, 3, 'the sound still plays alongside the notificat
 fetchCalls.length = 0;
 notifications[0].onclick();
 assert.equal(fetchCalls.length, 1, 'the notification click posts to the focus route');
-assert.equal(fetchCalls[0].input, '/notify-sounds/focus', 'the focus route path matches the Host half');
+	assert.equal(fetchCalls[0].input, '/notify-sounds/focus?vis=hidden', 'the click carries the page visibility — the one fact Win32 cannot see');
 assert.equal(fetchCalls[0].init.method, 'POST', 'the focus request is a POST');
+
+// A toast clicked after the page came back reports "visible", so the Host can
+// keep the fast native path instead of asking Electron to show the window.
+document.visibilityState = 'visible';
+fetchCalls.length = 0;
+notifications[0].onclick();
+assert.equal(fetchCalls[0].input, '/notify-sounds/focus?vis=visible', 'a click from a visible page says so');
+document.visibilityState = 'hidden';
 
 // The toast names the conversation, so several open chats can be told apart
 // without reading the body. (The harness's `t` returns the key, so copy is

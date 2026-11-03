@@ -16,7 +16,7 @@ Walk away from the window without missing anything: an OS notification whether t
 **Install**: DSH → **Plugins** in the left sidebar → Add plugin, paste the line below (keep the version — a release younger than 24 hours is resolved back to the previous one by pnpm's `minimumReleaseAge`) and press **Install**:
 
 ```
-dsh-plugin-notify-sounds@1.9.3
+dsh-plugin-notify-sounds@1.9.4
 ```
 
 ---
@@ -66,7 +66,7 @@ Everything applies immediately — no restart needed.
 2. Paste the package name **with a version** (this plugin is published on [npm](https://www.npmjs.com/package/dsh-plugin-notify-sounds)):
 
    ```
-   dsh-plugin-notify-sounds@1.9.3
+   dsh-plugin-notify-sounds@1.9.4
    ```
 
    Do not drop the version: pnpm's `minimumReleaseAge` policy keeps a release younger than 24 hours out of automatic resolution, so the bare name resolves to the previous one. The current version is on [npm](https://www.npmjs.com/package/dsh-plugin-notify-sounds?activeTab=versions) and in [Releases](https://github.com/BillCx330/dsh-plugin-notify-sounds/releases).
@@ -100,7 +100,7 @@ dsh plugin --profile <your profile> add github:BillCx330/dsh-plugin-notify-sound
 **Release archive** — download the `.tgz` from [Releases](https://github.com/BillCx330/dsh-plugin-notify-sounds/releases) and install it by its **path on disk**:
 
 ```sh
-dsh plugin --profile <your profile> add ./dsh-plugin-notify-sounds-1.9.3.tgz
+dsh plugin --profile <your profile> add ./dsh-plugin-notify-sounds-1.9.4.tgz
 ```
 
 (`dsh plugin add` hands its argument straight to the package manager, so it takes a local file path — a download URL will not work.)
@@ -123,6 +123,7 @@ The command line writes `dsh.profile.bundles` and installs the dependency for yo
 - **Versions up to 1.7.0** reach 1.8.0 through their own updater (1.8.0 keeps the same seven filenames), but that arrival is not registered with pnpm: reinstall once through the package manager as above and every later upgrade stays in place. Versions up to 1.6.9 cannot install a release that adds a file — their fixed whitelist refuses it safely; the same one-time reinstall fixes that too.
 - **Multiple windows** elect one page to speak (since 1.7.0): sounds, system notifications and repeat reminders therefore fire once for the whole GUI, not once per window. Title marks stay per-window, because each window has its own title. If the speaking page closes or crashes, another takes over within seconds.
 - **Click-to-return** is fully implemented and tested on Windows; macOS / Linux fall back to the system deep link and are unverified.
+- **A click is slower when the window was closed to the tray**: that case goes through the deep link so Electron can `show()` the window itself (otherwise the frame comes back while the page stays paused) — about 0.5–1.5s slower. On the welcome screen the deep link may do nothing.
 - **Third-party desktop wrappers** (e.g. DSH NEXT) register no `dsh://` protocol and expose no focus API, so clicking a notification cannot return you to the window there — the gap is on the host side, not something a plugin can close.
 - **The window is found by its title** — deliberately without inspecting other processes (that trips security software). If DSH ever changes its title format, click-to-return silently stops working; sounds and notifications are unaffected.
 - **The nav glyph** depends on the settings panel's DOM structure and silently falls back to the official gear after a DSH redesign — cosmetic only.
@@ -146,6 +147,7 @@ For anyone hacking on the code (exact details live in the source comments):
 
 ## 📜 Changelog
 
+- **v1.9.4** (2026-11-03) **Fixed the window appearing frozen after a notification click, and the window not coming back at all with DevTools open.** Two Windows-only defects ([#5](https://github.com/BillCx330/dsh-plugin-notify-sounds/issues/5)): (1) the raise used Win32 `ShowWindow`, which brings the frame back but leaves the page hidden — the renderer stays paused, so you see the last frame; worse, the window now counts as "visible", so every later click only focuses it and it never recovers. Only a minimised window is restored natively now; a hidden one — or one whose frame is visible while its page is not — goes through `dsh://open`, where Electron's own `show()` restores both. (2) Window matching let any visible window of the shell process outrank a hidden window matched by title, so with DevTools open the inspector was raised instead; titles now always win, DevTools never matches, every candidate must belong to this process, and a blank-titled window remains the last resort. **Cost**: clicking while the page is hidden goes through the deep link, so the window takes about 0.5–1.5s longer.
 - **v1.9.3** (2026-11-02) **A visible-but-unfocused window now raises a system notification.** Notifications used to fire only while the page was hidden, but a window sitting in plain sight behind another app — or on a second screen while you type elsewhere — still reports `visible`, so that whole case was silent ([#5](https://github.com/BillCx330/dsh-plugin-notify-sounds/issues/5), thanks @myzc1000). The gate is now "hidden **or** unfocused". Minimised, tray-hidden and fully covered windows behave as before (Chromium's occlusion tracking marks those hidden).Two small fixes came along: a refused write while adding a clip left its uploaded file behind (it is deleted now), and a multi-line conversation title broke the toast title across lines (it is flattened to one).
 - **v1.9.2** (2026-10-30) **System notifications are titled with the conversation name.** They used to read "Task finished / The agent has finished the current task", so with several conversations open you had to click through to learn which one. The title now carries the conversation's name (from the `title` already on DSH's session rows, falling back to the workspace folder — and treating DSH's own "Working directory: …" fallback as unnamed, so only the folder segment shows), and the body is unchanged; a decision toast prefixes its body with the event so nothing is lost. Titles are trimmed at 48 characters, an untitled session keeps the old wording, and a raw session id is never shown. These fields exist since DSH 0.2.0 — not a new API — and when they are missing the behaviour is exactly what it was. **One cross-platform fix came along**: on Windows two windows uploading the same clip at once made the second report "not audio" (415) — POSIX lets `rename` overwrite, Windows refuses — and that refusal is now treated as success. ([#4](https://github.com/BillCx330/dsh-plugin-notify-sounds/issues/4), thanks @AdySnowflake)
 - **v1.9.1** (2026-10-29) **Fixed "too quiet": the nine presets are now levelled by loudness, not by peak.** A user reported that even 100% was quiet. Two things were stacked: the presets had never been matched to each other (`coin` peaks at 0.105, `ding` at 0.315 — 9.5 dB apart), and all of them sat about 12 dB below a decoded clip (a preset played at -16 dBFS at 100%, an imported file at -4). The same slider number meant two loudnesses. The first cut levelled them by peak, which made the coin sound louder still: a square carries 3 dB more energy than a sine at the same peak (RMS/peak 1.0 vs 0.707). Levels now use a crest-corrected peak — sines and squares land on the same energy, and triangles are capped at the ceiling rather than pushed past it. The same number is about 12 dB louder, and the nine sounds agree with each other. **The saved volume is re-scaled once on upgrade**: at the new scale the same number is ~10 dB louder, so the stored value is halved (60 → 30, 100 → 50) — about 3.5 dB above where you were. Turn it up for the new headroom. ([#3](https://github.com/BillCx330/dsh-plugin-notify-sounds/issues/3), thanks @sink-er)

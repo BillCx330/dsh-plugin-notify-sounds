@@ -111,9 +111,10 @@ const windowNative = (windows) => ({
 	EnumWindows: (visit) => {
 		for (const window of windows) if (visit(window.handle) === false) return;
 	},
-	IsWindowVisible: (handle) => windows.find((window) => window.handle === handle).visible,
+	IsWindowVisible: (handle) => windows.find((window) => window.handle === handle).visible === true,
+	IsIconic: (handle) => windows.find((window) => window.handle === handle).iconic === true,
 	GetWindowThreadProcessId: (handle, buffer) => {
-		buffer[0] = windows.find((window) => window.handle === handle).pid ?? 0;
+		buffer[0] = windows.find((window) => window.handle === handle).pid ?? process.ppid;
 		return 0;
 	},
 	GetWindowTextLengthW: (handle) => windows.find((window) => window.handle === handle).title.length,
@@ -128,20 +129,41 @@ assert.equal(host.findDesktopWindow(windowNative([
 	{ handle: 7, visible: false, title: '会话 — DeepSeek Harness' },
 	{ handle: 9, visible: true, title: '另一个 — DeepSeek Harness' },
 ])), 9, 'a visible window wins over a hidden one');
+
+// The inspector is a visible window owned by the same process, and its title
+// ends with the app name; a hidden main window must still win.
 assert.equal(host.findDesktopWindow(windowNative([
-	{ handle: 5, visible: false, title: '会话 — DeepSeek Harness' },
-	{ handle: 6, visible: true, title: '', pid: process.ppid },
-])), 6, 'a visible window of the shell outranks a hidden window matched only by title');
-assert.equal(host.findDesktopWindow(windowNative([{ handle: 4, visible: true, title: '', pid: process.ppid }])), 4, 'the shell window is found by its owning process when the title is empty');
-assert.equal(host.findDesktopWindow(windowNative([{ handle: 4, visible: false, title: '', pid: process.ppid }])), 4, 'a hidden shell window is found by process too');
-assert.equal(host.findDesktopWindow(windowNative([{ handle: 7, visible: true, title: '别的窗口' }])), undefined, 'an unrelated window is not the app');
+	{ handle: 7, visible: false, title: '会话 — DeepSeek Harness' },
+	{ handle: 8, visible: true, title: 'DevTools - 会话 — DeepSeek Harness' },
+])), 7, 'a hidden main window outranks a visible DevTools window');
+
+// Same title, another process: raising it would bring the wrong install.
+assert.equal(host.findDesktopWindow(windowNative([
+	{ handle: 7, visible: true, title: '会话 — DeepSeek Harness', pid: 4 },
+])), undefined, 'a same-titled window of another process is not raised');
+
+// An empty title is the transient case the last resort exists for: usable
+// while hidden, never while visible (a visible blank window is a helper).
+assert.equal(host.findDesktopWindow(windowNative([{ handle: 4, visible: false, title: '', pid: process.ppid }])), 4, 'a hidden shell window is found by process when the title is empty');
+assert.equal(host.findDesktopWindow(windowNative([{ handle: 4, visible: true, title: '', pid: process.ppid }])), undefined, 'a visible blank-titled helper is not mistaken for the app');
+assert.equal(host.findDesktopWindow(windowNative([{ handle: 7, visible: true, title: '别的窗口', pid: 4 }])), undefined, 'an unrelated window is not the app');
 
 assert.ok(host.isDesktopTitle('DeepSeek Harness'), 'the bare app title matches');
 assert.ok(host.isDesktopTitle('某会话 — DeepSeek Harness'), 'a session title matches (em dash)');
 assert.ok(host.isDesktopTitle('Some Session - DeepSeek Harness'), 'a hyphen variant matches too');
+assert.ok(host.isDesktopTitle('聊聊 DevTools 的会话 — DeepSeek Harness'), 'a conversation that mentions DevTools still matches');
+assert.ok(!host.isDesktopTitle('DevTools - 某会话 — DeepSeek Harness'), 'the inspector window is not the app');
+assert.ok(!host.isDesktopTitle('开发者工具 - 某会话 — DeepSeek Harness'), 'the localised inspector window is not the app either');
 assert.ok(!host.isDesktopTitle('DeepSeek Harness — Another App'), 'a title that only starts with the name does not match');
 assert.ok(!host.isDesktopTitle('Another App'), 'another app does not match');
 assert.ok(!host.isDesktopTitle(''), 'an empty title does not match');
+
+// What a raise decides, given what Win32 and the page each report.
+assert.equal(host.raiseIntent({ iconic: false, visible: true, pageHidden: false }), 'native', 'a visible window is raised natively');
+assert.equal(host.raiseIntent({ iconic: true, visible: true, pageHidden: false }), 'restore', 'a minimised window restores natively');
+assert.equal(host.raiseIntent({ iconic: true, visible: true, pageHidden: true }), 'restore', 'minimised wins over a hidden page: restore is enough');
+assert.equal(host.raiseIntent({ iconic: false, visible: true, pageHidden: true }), 'hidden', 'a visible window whose page is hidden needs Electron show');
+assert.equal(host.raiseIntent({ iconic: false, visible: false, pageHidden: false }), 'hidden', 'a window closed to the tray needs Electron show');
 
 // Reading the title takes two Win32 calls, and the page can rewrite its title
 // between them — switching sessions is exactly when it does. The second call
@@ -291,7 +313,7 @@ const browserLines = await captureConsole(async () => {
 });
 assert.equal(browserRes.statusCode, 204, 'a browser click is answered 204');
 assert.ok(browserRes.ended, 'the 204 response is ended');
-assert.ok(browserLines.some((line) => line.includes('focus click (fromBrowser=true)')), 'the browser click is logged');
+assert.ok(browserLines.some((line) => line.includes('focus click (fromBrowser=true')), 'the browser click is logged');
 assert.ok(!browserLines.some((line) => line.includes('raising')), 'a browser click never raises the Desktop window');
 
 // A Desktop click (no Origin — the shell strips it) raises the window. The
@@ -316,7 +338,7 @@ try {
 }
 assert.equal(desktopRes.statusCode, 204, 'a Desktop click is answered 204 before the raise');
 assert.ok(desktopRes.ended, 'the 204 response is ended');
-assert.ok(desktopLines.some((line) => line.includes('focus click (fromBrowser=false)')), 'the Desktop click is logged');
+assert.ok(desktopLines.some((line) => line.includes('focus click (fromBrowser=false')), 'the Desktop click is logged');
 assert.ok(desktopLines.some((line) => line.includes('raising via xdg-open')), 'a Desktop click attempts the raise');
 assert.equal(process.platform, realPlatform, 'the platform mock is restored');
 

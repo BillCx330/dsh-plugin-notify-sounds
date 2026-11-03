@@ -16,7 +16,7 @@
 **安装**：DSH → 左侧栏「插件」→ 添加插件，粘贴下面这行（**带上版本号**，否则发布不满 24 小时的版本会被 pnpm 的 `minimumReleaseAge` 解析回上一版），点「安装」：
 
 ```
-dsh-plugin-notify-sounds@1.9.3
+dsh-plugin-notify-sounds@1.9.4
 ```
 
 ---
@@ -66,7 +66,7 @@ DSH 的状态提示只有视觉——状态点、侧栏标记。你一切到别�
 2. 在输入框粘贴包名**和版本号**（本插件已发布在 [npm](https://www.npmjs.com/package/dsh-plugin-notify-sounds)）：
 
    ```
-   dsh-plugin-notify-sounds@1.9.3
+   dsh-plugin-notify-sounds@1.9.4
    ```
 
    版本号不要省：pnpm 的 `minimumReleaseAge` 策略会把刚发布不到 24 小时的版本挡在外面，只写包名会解析回上一个版本。想看最新版本号可到 [npm](https://www.npmjs.com/package/dsh-plugin-notify-sounds?activeTab=versions) 或 [Releases](https://github.com/BillCx330/dsh-plugin-notify-sounds/releases) 查。
@@ -100,7 +100,7 @@ dsh plugin --profile <你的 profile> add github:BillCx330/dsh-plugin-notify-sou
 **Release 压缩包** —— 从 [Releases](https://github.com/BillCx330/dsh-plugin-notify-sounds/releases) 下载 `.tgz`，用它**在磁盘上的路径**安装：
 
 ```sh
-dsh plugin --profile <你的 profile> add ./dsh-plugin-notify-sounds-1.9.3.tgz
+dsh plugin --profile <你的 profile> add ./dsh-plugin-notify-sounds-1.9.4.tgz
 ```
 
 （`dsh plugin add` 把参数原样交给包管理器，所以要给本地文件路径，不能填下载地址。）
@@ -123,6 +123,7 @@ dsh plugin --profile <你的 profile> add ./dsh-plugin-notify-sounds
 - **1.7.0 及更早版本**可以通过它们自带的自更新到达 1.8.0（1.8.0 保持同样的七个文件名），但这次到达不会被 pnpm 登记：按上面的方式用包管理器重装一次，此后所有升级都会留下。1.6.9 及更早无法安装「新增了文件」的版本——固定白名单会安全拒绝；同样的一次性重装即可解决。
 - **多窗口**：提示音、系统通知和重复提醒由同一个 GUI 的所有页面选出一个「发声页」来发（1.7.0 起），所以同一个事件只响一次；窗口标题标记仍是每个窗口各自一份，因为它们各自有标题。发声页关闭或崩溃后几秒内由其他页面接管。
 - **点击通知回到窗口**：Windows 完整实现并实测；macOS / Linux 走系统深链，未验证。
+- **关闭到后台后点通知会慢一点**：这种情况走系统深链、由 Electron 自己把窗口 `show` 回来（否则画面会停在最后一帧），窗口出现比平时慢约 0.5–1.5 秒；停在欢迎页时深链可能不生效。
 - **第三方封装的桌面客户端**（如 DSH NEXT）：唤窗依赖官方壳的 Win32 能力与 `dsh://` 协议注册，封装版没有这两样，点击通知不会回到窗口——那是宿主侧缺的，插件无法补。
 - **唤窗按窗口标题定位主窗口**：刻意不读取其他进程信息（那会触发杀软主动防御）。若将来 DSH 改变标题格式，唤窗会静默失效——提示音与通知本身不受影响。
 - **导航小图标**：依赖设置面板的 DOM 结构，若DSH 改版后自动回落为官方齿轮，仅影响外观。
@@ -145,6 +146,7 @@ dsh plugin --profile <你的 profile> add ./dsh-plugin-notify-sounds
 
 ## 📜 更新记录
 
+- **v1.9.4**（2026-11-03）**修好「窗口弹出来但冻住」，以及开 DevTools 后点通知窗口不回来。** 两个 Windows 专属问题（[#5](https://github.com/BillCx330/dsh-plugin-notify-sounds/issues/5)）：① 唤窗以前用 Win32 `ShowWindow` 把窗口显示出来，但 `hide()` 过的窗口页面仍处于隐藏、渲染是停的——窗口框有了，画面停在最后一帧；更糟的是此后系统层面已算「可见」，再点只会走聚焦，永远恢复不了。现在只对**最小化**用原生 restore，隐藏或「框可见但页面隐藏」一律交给 `dsh://open`，由 Electron 自己 `show()`。② 窗口匹配以前让「同进程的任意可见窗口」压过「按标题命中的隐藏窗口」，开着 DevTools 时会选中 DevTools；现在标题永远优先，DevTools 不参与匹配，所有候选必须是本进程的窗口，空标题窗口保留为最后兜底。**代价**：页面处于隐藏态时点击会走深链，窗口出现慢约 0.5–1.5 秒。
 - **v1.9.3**（2026-11-02）**窗口可见但没焦点时也会弹系统通知。** 此前只在页面不可见时发通知；而窗口被别的程序盖住、或你切到别的窗口打字、DSH 仍完整显示在屏幕上时，页面报告的仍是 `visible`，这类「看得见但没在用」的情况完全收不到通知（[#5](https://github.com/BillCx330/dsh-plugin-notify-sounds/issues/5)，感谢 @myzc1000）。现在条件改为「不可见 **或** 没有焦点」。最小化、托盘、被完全遮挡（Chromium 的遮挡检测会把窗口标记为 hidden）行为不变。顺带修了两处小问题：上传音频时若写入被拒，已经存好的文件会残留（现在会一并清掉）；对话标题里含换行时会把通知标题撑成两行（现在折叠成一行）。
 - **v1.9.2**（2026-10-30）**系统通知的标题改成对话名。** 此前通知固定写「任务完成 / 智能体已完成当前任务」，同时开着几个对话时，得点进去才知道是哪一个。现在标题用该对话的名字（读的是 DSH 会话列表里已有的 `title`；没有标题、或标题只是「Working directory: 路径」这类兜底串时，只显示目录名），正文不变；决策通知的正文会带上「需要你的决策：」，把原来写在标题里的事件补回来。标题超过 48 字会截断，未命名且无目录时保持原来的文案——**不会显示裸会话 id**。字段从 DSH 0.2.0 起就有，不是新 API，取不到时行为与之前完全一致。**顺带修了一个跨平台问题**：Windows 下两个窗口同时上传同一段音频时，后到的那个会被误报「不是音频」（415）——POSIX 上 `rename` 能覆盖、Windows 上会抛错；现在这种情况按成功处理。（[#4](https://github.com/BillCx330/dsh-plugin-notify-sounds/issues/4)，感谢 @AdySnowflake）
 - **v1.9.1**（2026-10-29）**修好「声音太小」：九个内置音效按实际响度对齐，而不是按峰值。** 有用户反馈 100% 也偏小。查下来是两件事：九个预设从未互相对齐（`coin` 的叠加峰值 0.105、`ding` 0.315，差 9.5 dB）；预设整体又比自定义音频轻约 12 dB（预设 100% 时约 -16 dBFS，导入的音频约 -4 dBFS）——同一个音量数字，两种响度。第一版修复按**峰值**对齐，结果金币反而更响：方波在同等峰值下能量比正弦高 3 dB（RMS/峰值 1.0 对 0.707）。现在按**波峰因数折算后的峰值**对齐——正弦和方波落在同一能量上，三角波因为峰值已经触顶不再加推。同样的音量数字比以前响约 12 dB，九个音效之间也一致了。**升级时音量会自动折算**：新刻度下同一个数字比以前响约 10 dB，所以首次启动会把已存的音量减半（60 → 30、100 → 50），实际只比原来高约 3.5 dB；想更大声再往上调即可。（[#3](https://github.com/BillCx330/dsh-plugin-notify-sounds/issues/3)，感谢 @sink-er）
