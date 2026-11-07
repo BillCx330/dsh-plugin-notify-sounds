@@ -16,7 +16,7 @@ Walk away from the window without missing anything: an OS notification whether t
 **Install**: DSH → **Plugins** in the left sidebar → Add plugin, paste the line below (keep the version — a release younger than 24 hours is resolved back to the previous one by pnpm's `minimumReleaseAge`) and press **Install**:
 
 ```
-dsh-plugin-notify-sounds@1.9.4
+dsh-plugin-notify-sounds@1.9.5
 ```
 
 ---
@@ -66,7 +66,7 @@ Everything applies immediately — no restart needed.
 2. Paste the package name **with a version** (this plugin is published on [npm](https://www.npmjs.com/package/dsh-plugin-notify-sounds)):
 
    ```
-   dsh-plugin-notify-sounds@1.9.4
+   dsh-plugin-notify-sounds@1.9.5
    ```
 
    Do not drop the version: pnpm's `minimumReleaseAge` policy keeps a release younger than 24 hours out of automatic resolution, so the bare name resolves to the previous one. The current version is on [npm](https://www.npmjs.com/package/dsh-plugin-notify-sounds?activeTab=versions) and in [Releases](https://github.com/BillCx330/dsh-plugin-notify-sounds/releases).
@@ -79,7 +79,8 @@ The "install source" dropdown above the box picks the download mirror (mainland 
 
 **Upgrades are installed by the package manager**, so the profile's lockfile moves with the files — a DSH plugin cannot install its own update durably (the manager refuses a package that is already declared, and its remove-then-install step unloads the very code that would finish the install). The plugin therefore only *checks*, and tells you where to install:
 
-- **Inside DSH (recommended, and the only path verified on the Desktop)**: **Plugins** in the left sidebar → uninstall this plugin under *Installed plugins* → **Add plugin** → paste `dsh-plugin-notify-sounds@<version>` → Install → restart DSH. (Keep the version: pnpm's `minimumReleaseAge` policy keeps a freshly published version out of automatic resolution for its first 24 hours, so the bare name can resolve to the previous release.)
+- **0.2.2 and later**: **Plugins** in the sidebar → the row shows its version state, click update (no uninstall-and-add).
+- **0.2.1 and earlier**: **Plugins** in the left sidebar → uninstall this plugin under *Installed plugins* → **Add plugin** → paste `dsh-plugin-notify-sounds@<version>` → Install → restart DSH. (Keep the version: pnpm's `minimumReleaseAge` policy keeps a freshly published version out of automatic resolution for its first 24 hours, so the bare name can resolve to the previous release.)
 
 Uninstalling keeps your settings: preferences and uploaded audio live in the profile (`cordis.patch.yml` and `notify-sounds/sounds/`), so a reinstall restores them — including a clip migrated out of a pre-1.9.0 install.
 - **With the marketplace plugin** ([dshmarket](https://www.npmjs.com/package/dshmarket)): update it in one click there.
@@ -100,7 +101,7 @@ dsh plugin --profile <your profile> add github:BillCx330/dsh-plugin-notify-sound
 **Release archive** — download the `.tgz` from [Releases](https://github.com/BillCx330/dsh-plugin-notify-sounds/releases) and install it by its **path on disk**:
 
 ```sh
-dsh plugin --profile <your profile> add ./dsh-plugin-notify-sounds-1.9.4.tgz
+dsh plugin --profile <your profile> add ./dsh-plugin-notify-sounds-1.9.5.tgz
 ```
 
 (`dsh plugin add` hands its argument straight to the package manager, so it takes a local file path — a download URL will not work.)
@@ -147,6 +148,7 @@ For anyone hacking on the code (exact details live in the source comments):
 
 ## 📜 Changelog
 
+- **v1.9.5** (2026-11-07) **Adapted to DSH 0.2.2-rc.1: the alarm-clock icon is back in Settings.** 0.2.2 wraps the nav glyph in a `<span>`, so the old "find the svg and replace it" DOM patch no longer matched and the cell fell back to the default gear. This DSH release adds the supported `settings.section.icon` slot, so the glyph is now registered the official way (0.2.1 keeps the DOM swap; both paths stay). The upgrade notes now point at the plugin page's in-place update instead of uninstall-and-add.
 - **v1.9.4** (2026-11-03) **Fixed the window appearing frozen after a notification click, and the window not coming back at all with DevTools open.** Two Windows-only defects ([#5](https://github.com/BillCx330/dsh-plugin-notify-sounds/issues/5), thanks @myzc1000): (1) the raise used Win32 `ShowWindow`, which brings the frame back but leaves the page hidden — the renderer stays paused, so you see the last frame; worse, the window now counts as "visible", so every later click only focuses it and it never recovers. Only a minimised window is restored natively now; a hidden one — or one whose frame is visible while its page is not — goes through `dsh://open`, where Electron's own `show()` restores both. (2) Window matching let any visible window of the shell process outrank a hidden window matched by title, so with DevTools open the inspector was raised instead; titles now always win, DevTools never matches, every candidate must belong to this process, and a blank-titled window remains the last resort. (3) The deep link now goes through `explorer.exe`: the previous launcher **failed silently** while the window was hidden — exit code 0, nothing happened, so a click did nothing at all. **Cost**: clicking while the page is hidden goes through the deep link, so the window takes about 0.5–1.5s longer.
 - **v1.9.3** (2026-11-02) **A visible-but-unfocused window now raises a system notification.** Notifications used to fire only while the page was hidden, but a window sitting in plain sight behind another app — or on a second screen while you type elsewhere — still reports `visible`, so that whole case was silent ([#5](https://github.com/BillCx330/dsh-plugin-notify-sounds/issues/5), thanks @myzc1000). The gate is now "hidden **or** unfocused". Minimised, tray-hidden and fully covered windows behave as before (Chromium's occlusion tracking marks those hidden).Two small fixes came along: a refused write while adding a clip left its uploaded file behind (it is deleted now), and a multi-line conversation title broke the toast title across lines (it is flattened to one).
 - **v1.9.2** (2026-10-30) **System notifications are titled with the conversation name.** They used to read "Task finished / The agent has finished the current task", so with several conversations open you had to click through to learn which one. The title now carries the conversation's name (from the `title` already on DSH's session rows, falling back to the workspace folder — and treating DSH's own "Working directory: …" fallback as unnamed, so only the folder segment shows), and the body is unchanged; a decision toast prefixes its body with the event so nothing is lost. Titles are trimmed at 48 characters, an untitled session keeps the old wording, and a raw session id is never shown. These fields exist since DSH 0.2.0 — not a new API — and when they are missing the behaviour is exactly what it was. **One cross-platform fix came along**: on Windows two windows uploading the same clip at once made the second report "not audio" (415) — POSIX lets `rename` overwrite, Windows refuses — and that refusal is now treated as success. ([#4](https://github.com/BillCx330/dsh-plugin-notify-sounds/issues/4), thanks @AdySnowflake)

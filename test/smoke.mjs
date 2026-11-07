@@ -640,8 +640,16 @@ const zhKeys = Object.keys(localeRegistrations[0].dicts.zh).sort();
 const enKeys = Object.keys(localeRegistrations[0].dicts.en).sort();
 assert.deepEqual(zhKeys, enKeys, 'zh and en key sets match');
 
-assert.deepEqual(slotInjections, ['settings.section'], 'injects the settings section');
-assert.equal(slotRegistrations.length, 1, 'one section registration');
+assert.deepEqual(slotInjections, ['settings.section', 'settings.section.icon'], 'injects the settings section and its nav glyph');
+
+// 0.2.2 renders a section's glyph from the `settings.section.icon` slot, and
+// only for a matching id — a mismatch silently shows the default gear.
+const icon = slotRegistrations.find((entry) => entry.options.name === 'settings.section.icon');
+assert.ok(icon !== undefined, 'the nav glyph is registered into the shell slot');
+assert.equal(icon.options.id, 'notify-sounds', 'the glyph id matches the section id');
+assert.equal(typeof icon.component, 'function', 'the glyph is a component');
+
+assert.equal(slotRegistrations.length, 2, 'one section registration and one glyph registration');
 const section = slotRegistrations[0];
 assert.equal(section.options.id, 'notify-sounds');
 assert.equal(section.options.order, 5);
