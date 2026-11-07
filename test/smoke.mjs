@@ -678,7 +678,7 @@ assert.equal(glyph.getAttribute('class'), 'wCInkW_navIcon', 'the shell sizing cl
 assert.ok(glyph.hasAttribute('data-notify-sounds-icon'), 'the swap is marked');
 assert.equal(glyph.getAttribute('stroke-width'), '1.3', 'medium stroke');
 assert.equal(glyph.getAttribute('fill'), 'none');
-assert.equal(glyph.children.length, 2, 'the bell: body and clapper');
+assert.equal(glyph.children.length, 6, "the alarm clock's six strokes");
 assert.equal(glyph.getAttribute('stroke'), 'currentColor', 'the nav colour drives the whole glyph');
 assert.equal(glyph.getAttribute('stroke-linecap'), 'round');
 for (const path of glyph.children) {
