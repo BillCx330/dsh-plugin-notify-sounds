@@ -678,10 +678,11 @@ assert.equal(glyph.getAttribute('class'), 'wCInkW_navIcon', 'the shell sizing cl
 assert.ok(glyph.hasAttribute('data-notify-sounds-icon'), 'the swap is marked');
 assert.equal(glyph.getAttribute('stroke-width'), '1.3', 'medium stroke');
 assert.equal(glyph.getAttribute('fill'), 'none');
-assert.equal(glyph.children.length, 6, 'six alarm-clock paths');
+assert.equal(glyph.children.length, 2, 'the bell: body and clapper');
+assert.equal(glyph.getAttribute('stroke'), 'currentColor', 'the nav colour drives the whole glyph');
+assert.equal(glyph.getAttribute('stroke-linecap'), 'round');
 for (const path of glyph.children) {
 	assert.equal(path.tagName, 'path');
-	assert.equal(path.getAttribute('stroke'), 'currentColor', 'paths follow the nav color');
 }
 assert.equal(generalCell.cell.children[0], generalCell.icon, 'other cells keep their shipped glyph');
 assert.ok(!generalCell.icon.hasAttribute('data-notify-sounds-icon'));
