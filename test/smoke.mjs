@@ -1169,6 +1169,27 @@ focusState = true;
 document.visibilityState = 'visible';
 form.value = { ...baseValue() };
 
+// --- Assertions: onlyWhenHidden means "away", not just "hidden" --------------
+// The sound gate must share the system notification's definition of away: a
+// window in plain sight but unfocused (issue #5: "only fires once DSH is in
+// the background") still chimes, while the window the user is actually typing
+// in stays quiet. Before the fix the gate read `visibilityState` alone, so the
+// first case was silently skipped.
+form.value = { ...baseValue(), onlyWhenHidden: true };
+document.visibilityState = 'visible';
+focusState = false;
+sessionRowsById.s19 = { origin: 'main' };
+scheduled.length = 0;
+publish([['s19', { running: true, pendingInteraction: { kind: 'question', questions: [{ question: '继续吗？' }] } }]]);
+assert.ok(scheduled.length > 0, 'a visible but unfocused window still plays the onlyWhenHidden sound');
+
+focusState = true;
+sessionRowsById.s20 = { origin: 'main' };
+scheduled.length = 0;
+publish([['s20', { running: true, pendingInteraction: { kind: 'question', questions: [{ question: '继续吗？' }] } }]]);
+assert.equal(scheduled.length, 0, 'a focused window stays quiet under onlyWhenHidden');
+form.value = { ...baseValue() };
+
 // --- Assertions: repeat reminder ------------------------------------------------
 // The reminder exists only to reach someone who has NOT seen the decision.
 // Seen once — it appeared while the user was at the window, or they came back
