@@ -748,6 +748,75 @@ assert.deepEqual(
 	'row order: master switch, volume, the three triggers, the custom-sound library row, then sub-agent scope, goal final-round scope, notification, title flash, repeat reminder, quiet hours, hidden-only, the auto-check toggle and the update row',
 );
 
+// --- Assertions: the macOS Desktop keeps the title switch ---------------------
+// The Desktop's main window runs `titleBarStyle: "hiddenInset"`, so the mark is
+// not drawn on the title bar. The window title itself still reaches the Window
+// menu, Mission Control and the Dock's window list — the shell never cancels
+// `page-title-updated`, and the web Client assigns `document.title` per
+// conversation — so the row stays enabled and only says where to look. An
+// earlier release disabled it instead, which made a working feature
+// unreachable.
+const renderSettings = () => renderTree(
+	section.component({
+		useConfig: (selector) => selector(form.getSnapshot()),
+		setField: injected.setField,
+		preview: injected.preview,
+		previewSlot: injected.previewSlot,
+		uploadSound: injected.uploadSound,
+		removeSound: injected.removeSound,
+		t: (key) => key,
+	})
+);
+/** The title-flash row of one rendered settings tree. */
+const titleRow = (rendered) => rendered.children[0][2].children[0].filter(Boolean).find((row) => row.props.key === 'titleFlash');
+/** The `Switch` the row rendered, after the stub expanded it. */
+const rowSwitch = (row) => {
+	let found;
+	walkElements(row, (element) => {
+		if (element.type === 'Switch' && element.props.label === 'titleFlash.title') found = element;
+	});
+	return found;
+};
+/** Concatenated string children under the element carrying `className`. */
+const textUnder = (row, className) => {
+	let text;
+	walkElements(row, (element) => {
+		if (element.props.className !== className) return;
+		text = element.children.flat(Infinity).filter((child) => typeof child === 'string').join('');
+	});
+	return text;
+};
+const navigatorDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+Object.defineProperty(globalThis, 'navigator', {
+	value: {
+		platform: 'MacIntel',
+		userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) @deepseek-ai/dsh-desktop/0.2.2 Electron/33.2.0 Safari/537.36',
+	},
+	configurable: true,
+	writable: true,
+});
+const macRow = titleRow(renderSettings());
+assert.ok(macRow, 'the macOS Desktop renders the title row');
+assert.equal(rowSwitch(macRow).props.disabled, false, 'the title switch is enabled on the macOS Desktop');
+assert.equal(textUnder(macRow, 'dsh-notify-sounds-rowDescription'), 'titleFlash.macDescription', 'the row describes the mark instead of calling it unavailable');
+assert.equal(textUnder(macRow, 'dsh-notify-sounds-hint'), 'titleFlash.macHint', 'and points at the Window menu / Mission Control / Dock');
+
+// A macOS browser tab is not the shell: it shows the document title like any
+// other tab, so it keeps the ordinary copy and adds no hint.
+Object.defineProperty(globalThis, 'navigator', {
+	value: {
+		platform: 'MacIntel',
+		userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15',
+	},
+	configurable: true,
+	writable: true,
+});
+const macBrowserRow = titleRow(renderSettings());
+assert.equal(rowSwitch(macBrowserRow).props.disabled, false, 'the switch is enabled in a macOS browser tab too');
+assert.equal(textUnder(macBrowserRow, 'dsh-notify-sounds-rowDescription'), 'titleFlash.description', 'a macOS browser tab keeps the ordinary description');
+assert.equal(textUnder(macBrowserRow, 'dsh-notify-sounds-hint'), undefined, 'and adds no macOS hint');
+Object.defineProperty(globalThis, 'navigator', navigatorDescriptor);
+
 // --- Assertions: uncontrolled volume slider ------------------------------------
 let inputElement;
 walkElements(tree, (element) => {
