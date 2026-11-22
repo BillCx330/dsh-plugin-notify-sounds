@@ -16,7 +16,7 @@ Walk away from the window without missing anything: an OS notification whether t
 **Install**: DSH → **Plugins** in the left sidebar → Add plugin, paste the line below (keep the version — a release younger than 24 hours is resolved back to the previous one by pnpm's `minimumReleaseAge`) and press **Install**:
 
 ```
-dsh-plugin-notify-sounds@1.9.5
+dsh-plugin-notify-sounds@1.9.6
 ```
 
 ---
@@ -66,7 +66,7 @@ Everything applies immediately — no restart needed.
 2. Paste the package name **with a version** (this plugin is published on [npm](https://www.npmjs.com/package/dsh-plugin-notify-sounds)):
 
    ```
-   dsh-plugin-notify-sounds@1.9.5
+   dsh-plugin-notify-sounds@1.9.6
    ```
 
    Do not drop the version: pnpm's `minimumReleaseAge` policy keeps a release younger than 24 hours out of automatic resolution, so the bare name resolves to the previous one. The current version is on [npm](https://www.npmjs.com/package/dsh-plugin-notify-sounds?activeTab=versions) and in [Releases](https://github.com/BillCx330/dsh-plugin-notify-sounds/releases).
@@ -100,7 +100,7 @@ dsh plugin --profile <your profile> add github:BillCx330/dsh-plugin-notify-sound
 **Release archive** — download the `.tgz` from [Releases](https://github.com/BillCx330/dsh-plugin-notify-sounds/releases) and install it by its **path on disk**:
 
 ```sh
-dsh plugin --profile <your profile> add ./dsh-plugin-notify-sounds-1.9.5.tgz
+dsh plugin --profile <your profile> add ./dsh-plugin-notify-sounds-1.9.6.tgz
 ```
 
 (`dsh plugin add` hands its argument straight to the package manager, so it takes a local file path — a download URL will not work.)
@@ -148,6 +148,7 @@ For anyone hacking on the code (exact details live in the source comments):
 
 ## 📜 Changelog
 
+- **v1.9.6** (2026-11-22) **"Only when away" now really means unfocused too, and the title alert works on macOS again** ([#6](https://github.com/BillCx330/dsh-plugin-notify-sounds/pull/6), [#7](https://github.com/BillCx330/dsh-plugin-notify-sounds/pull/7), thanks @jasonwentf). (1) That setting used to read visibility alone: a window sitting on screen while you typed in another app still counted as "visible" and stayed silent. It now shares the system notification's test — hidden **or** unfocused — and the row's own wording changed to "Only when you are away". (2) The macOS Desktop draws no title-bar text, so the title alert used to be disabled there outright; the window title still reaches the Window menu, Mission Control and the Dock's window list, so the switch is enabled again with a hint saying where to look. The macOS half was verified by the contributor; Windows behaviour is unchanged.
 - **v1.9.5** (2026-11-07) **Adapted to DSH 0.2.2-rc.1: the Settings glyph is back, at the size of its neighbours.** 0.2.2 wraps the nav glyph in a `<span>`, so the old "find the svg and replace it" patch no longer matched and the cell fell back to the default gear; that release also added the supported `settings.section.icon` slot, so the glyph is now a registered component. Its size was fixed along the way: the alarm clock was drawn in 17 units and rendered into a 16px slot, shrinking it 6% and thinning the stroke from 1.3px to 1.22px; the paths are now refitted to the 16 unit box, so the weight matches the rest of the nav. 0.2.1 keeps the DOM swap; both paths stay. The upgrade notes point at 0.2.2's in-place update, and the in-app update hint follows the DSH version: 0.2.2 and later just say "click Update", older builds still get the full uninstall-and-add steps. The README's marketplace-update bullet is gone.
 - **v1.9.4** (2026-11-03) **Fixed the window appearing frozen after a notification click, and the window not coming back at all with DevTools open.** Two Windows-only defects ([#5](https://github.com/BillCx330/dsh-plugin-notify-sounds/issues/5), thanks @myzc1000): (1) the raise used Win32 `ShowWindow`, which brings the frame back but leaves the page hidden — the renderer stays paused, so you see the last frame; worse, the window now counts as "visible", so every later click only focuses it and it never recovers. Only a minimised window is restored natively now; a hidden one — or one whose frame is visible while its page is not — goes through `dsh://open`, where Electron's own `show()` restores both. (2) Window matching let any visible window of the shell process outrank a hidden window matched by title, so with DevTools open the inspector was raised instead; titles now always win, DevTools never matches, every candidate must belong to this process, and a blank-titled window remains the last resort. (3) The deep link now goes through `explorer.exe`: the previous launcher **failed silently** while the window was hidden — exit code 0, nothing happened, so a click did nothing at all. **Cost**: clicking while the page is hidden goes through the deep link, so the window takes about 0.5–1.5s longer.
 - **v1.9.3** (2026-11-02) **A visible-but-unfocused window now raises a system notification.** Notifications used to fire only while the page was hidden, but a window sitting in plain sight behind another app — or on a second screen while you type elsewhere — still reports `visible`, so that whole case was silent ([#5](https://github.com/BillCx330/dsh-plugin-notify-sounds/issues/5), thanks @myzc1000). The gate is now "hidden **or** unfocused". Minimised, tray-hidden and fully covered windows behave as before (Chromium's occlusion tracking marks those hidden).Two small fixes came along: a refused write while adding a clip left its uploaded file behind (it is deleted now), and a multi-line conversation title broke the toast title across lines (it is flattened to one).
