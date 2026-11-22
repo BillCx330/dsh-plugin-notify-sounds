@@ -34,7 +34,7 @@ Every visual detail of the settings section comes from DSH's own design system: 
 | **Aware even when you are away** | An OS notification whenever the window is minimised, covered, or merely unfocused (body is the approval reason or the question itself; **click to return to the window**) plus a taskbar title mark |
 | **Missed it? It reminds again** | Unanswered decisions re-ping every 1/5/15/30 minutes — and **stop for good once you have seen them**, even if you switch away again |
 | **Only what you care about** | Sub-agents (background tasks) are completely silent by default — only your own conversation is announced |
-| **Quiet when it should be** | Quiet hours (e.g. 22:00–08:00, wrapping past midnight), notify-only-when-hidden, and a master switch |
+| **Quiet when it should be** | Quiet hours (e.g. 22:00–08:00, wrapping past midnight), notify-only-when-away, and a master switch |
 | **Your sound, your way** | Nine built-in sounds, levelled to each other; **up to three of your own clips**, named and assignable to any alert (mp3 / wav / ogg / m4a, up to 15s each); volume — each feature with its own toggle |
 | **Update checks** | Checks npm for a newer version and points at the route that installs it — the **Plugins** panel in the sidebar (uninstall, then add again), the marketplace, or `dsh plugin add` on a web profile; the row also flags an install the profile's lockfile does not match |
 
@@ -54,7 +54,7 @@ Or upload your own audio (mp3 / wav / ogg / m4a, up to 15s and 3MB each, validat
 
 Settings → **Sounds** (between General and Models). Every feature has its own toggle, styled exactly like DSH's own preference pages:
 
-master switch and volume · per-trigger sounds with preview · sub-agent alerts · system notifications · window title alert · repeat interval · quiet hours · hidden-only mode · up to three named clips of your own · update checks (installs go through the package manager)
+master switch and volume · per-trigger sounds with preview · sub-agent alerts · system notifications · window title alert · repeat interval · quiet hours · away-only mode · up to three named clips of your own · update checks (installs go through the package manager)
 
 Everything applies immediately — no restart needed.
 
