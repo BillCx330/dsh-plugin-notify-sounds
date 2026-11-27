@@ -820,7 +820,10 @@ const macBrowserRow = titleRow(renderSettings());
 assert.equal(rowSwitch(macBrowserRow).props.disabled, false, 'the switch is enabled in a macOS browser tab too');
 assert.equal(textUnder(macBrowserRow, 'dsh-notify-sounds-rowDescription'), 'titleFlash.description', 'a macOS browser tab keeps the ordinary description');
 assert.equal(textUnder(macBrowserRow, 'dsh-notify-sounds-hint'), undefined, 'and adds no macOS hint');
-Object.defineProperty(globalThis, 'navigator', navigatorDescriptor);
+// Node 21+ owns `globalThis.navigator`; older runtimes have no descriptor to
+// restore, and `defineProperty(globalThis, 'navigator', undefined)` throws.
+if (navigatorDescriptor === undefined) delete globalThis.navigator;
+else Object.defineProperty(globalThis, 'navigator', navigatorDescriptor);
 
 // --- Assertions: uncontrolled volume slider ------------------------------------
 let inputElement;

@@ -754,5 +754,7 @@ assert.equal(host.rejectionOf({ requestRejection: () => 403 }, {}), 403, "pre-0.
 assert.equal(host.rejectionOf({ admit: () => ({ rejection: 401 }) }, {}), 401, "0.2.3: the admission's rejection is the status");
 assert.equal(host.rejectionOf({ admit: () => ({}) }, {}), undefined, "an admitted request proceeds");
 assert.equal(host.rejectionOf({ admit: () => undefined }, {}), undefined, "a connection that returns nothing does not block");
+assert.equal(host.rejectionOf({ admit: () => { throw new Error("boom"); } }, {}), 403, "a trust check that throws fails closed");
+assert.equal(host.rejectionOf({}, {}), 403, "a connection with neither call fails closed");
 
 console.log("host test: all assertions passed");
