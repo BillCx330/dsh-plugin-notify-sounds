@@ -510,8 +510,13 @@ const form = {
 const ctx = {
 	effect(fn) {
 		const dispose = fn();
+		// Cordis only accepts a disposer, a promise of one, or an iterable of
+		// them. `ctx.inject` deliberately returns a thenable Fiber instead, so
+		// an effect body that returns it has to fail here — exactly what the
+		// 0.2.3 watcher used to do.
+		assert.equal(typeof dispose, 'function', 'an effect body returns a disposer');
 		effects.push(dispose);
-		return typeof dispose === 'function' ? dispose : () => {};
+		return dispose;
 	},
 	locale: {
 		register(ns, dicts) {
@@ -2022,9 +2027,11 @@ assert.equal(fetchCalls[0].init.method, 'GET', 'the check is a GET');
 // source at runtime instead of hard-coding one shape. This replay throws on the
 // member read and only answers through `inject`.
 {
+	let subscriptions = 0;
 	const table = {
 		getSnapshot: () => statusSnapshot,
 		subscribe(listener) {
+			subscriptions += 1;
 			statusListeners.push(listener);
 			return () => {
 				statusListeners = statusListeners.filter((entry) => entry !== listener);
@@ -2032,6 +2039,7 @@ assert.equal(fetchCalls[0].init.method, 'GET', 'the check is a GET');
 		},
 	};
 	let injected;
+	let fiberDisposed = false;
 	const ctx023 = {
 		...ctx,
 		uiSession: {
@@ -2041,18 +2049,31 @@ assert.equal(fetchCalls[0].init.method, 'GET', 'the check is a GET');
 		},
 		inject(names, callback) {
 			injected = names;
-			return callback({ ...ctx023, uiSession: { sessionStatus: table } });
+			callback({ ...ctx023, uiSession: { sessionStatus: table } });
+			// Real Cordis returns a Fiber: a thenable that also owns `dispose`.
+			// Returning the callback's result here (as the old mock did) hides
+			// the invalid-effect bug this replay exists to pin.
+			const fiber = {
+				dispose() {
+					fiberDisposed = true;
+				},
+			};
+			fiber.then = (resolve) => resolve(fiber);
+			return fiber;
 		},
 	};
 	const disposers = [];
 	ctx023.effect = (fn) => {
 		const dispose = fn();
+		assert.equal(typeof dispose, 'function', '0.2.3: an effect body returns a disposer');
 		disposers.push(dispose);
-		return typeof dispose === 'function' ? dispose : () => {};
+		return dispose;
 	};
 	exports.apply(ctx023);
 	assert.deepEqual(injected, ['uiSession', 'uiSession.sessionStatus'], '0.2.3: the watcher asks for the service it needs');
+	assert.equal(subscriptions, 1, '0.2.3: the watcher attaches to the injected status table');
 	for (const dispose of disposers) dispose();
+	assert.equal(fiberDisposed, true, '0.2.3: disposing the effect releases the injected fiber');
 }
 
 console.log('smoke test: all assertions passed');

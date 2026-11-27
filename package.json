@@ -38,7 +38,7 @@
     "sound"
   ],
   "peerDependencies": {
-    "@deepseek-ai/schemastery": "^3.18.1"
+    "@deepseek-ai/schemastery": "^3.18.1 || ^3.20.0-alpha.1"
   },
   "devDependencies": {
     "@deepseek-ai/schemastery": "^3.18.4"
