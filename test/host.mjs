@@ -748,4 +748,11 @@ try {
 	else process.env.DSH_PROFILE_DIR = previousStoreEnv;
 	rmSync(storeRoot, { recursive: true, force: true });
 }
+// 0.2.3 removed `connection.requestRejection` and kept `admit`; every route
+// asks whichever the shell has, and reads the status from the same field.
+assert.equal(host.rejectionOf({ requestRejection: () => 403 }, {}), 403, "pre-0.2.3 shells keep the wrapper they always had");
+assert.equal(host.rejectionOf({ admit: () => ({ rejection: 401 }) }, {}), 401, "0.2.3: the admission's rejection is the status");
+assert.equal(host.rejectionOf({ admit: () => ({}) }, {}), undefined, "an admitted request proceeds");
+assert.equal(host.rejectionOf({ admit: () => undefined }, {}), undefined, "a connection that returns nothing does not block");
+
 console.log("host test: all assertions passed");
