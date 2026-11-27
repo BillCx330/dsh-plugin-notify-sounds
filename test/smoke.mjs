@@ -2015,4 +2015,44 @@ assert.equal(fetchCalls[0].init.method, 'GET', 'the check is a GET');
 	peers.clear();
 }
 
+// --- Assertions: 0.2.3 moved the status table into its own service -----------
+// Up to 0.2.2 `uiSession.sessionStatus` is a plain member. 0.2.3 registers it as
+// the `uiSession.sessionStatus` service and Cordis rejects the member read
+// unless that name is in `inject` (issue #8), so the watcher has to resolve its
+// source at runtime instead of hard-coding one shape. This replay throws on the
+// member read and only answers through `inject`.
+{
+	const table = {
+		getSnapshot: () => statusSnapshot,
+		subscribe(listener) {
+			statusListeners.push(listener);
+			return () => {
+				statusListeners = statusListeners.filter((entry) => entry !== listener);
+			};
+		},
+	};
+	let injected;
+	const ctx023 = {
+		...ctx,
+		uiSession: {
+			get sessionStatus() {
+				throw new Error('cannot get property "uiSession.sessionStatus" without inject');
+			},
+		},
+		inject(names, callback) {
+			injected = names;
+			return callback({ ...ctx023, uiSession: { sessionStatus: table } });
+		},
+	};
+	const disposers = [];
+	ctx023.effect = (fn) => {
+		const dispose = fn();
+		disposers.push(dispose);
+		return typeof dispose === 'function' ? dispose : () => {};
+	};
+	exports.apply(ctx023);
+	assert.deepEqual(injected, ['uiSession', 'uiSession.sessionStatus'], '0.2.3: the watcher asks for the service it needs');
+	for (const dispose of disposers) dispose();
+}
+
 console.log('smoke test: all assertions passed');
